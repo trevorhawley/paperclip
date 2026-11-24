@@ -209,6 +209,38 @@ import {
           grantedByUserId: null,
         });
       }
+      const historyPath = `/api/companies/${companyId}/external-conversation-updates`;
+      const openTask = await issueService(db).create(companyId, { title: "External work", status: "backlog" });
+      const privateTask = await issueService(db).create(companyId, { title: "Private work", status: "backlog" });
+      await db.update(issues).set({ visibility: "private", privacyRootIssueId: privateTask.id })
+        .where(eq(issues.id, privateTask.id));
+      const provenance = {
+        version: 1 as const,
+        sections: [{ title: "External AI provenance (self-reported)", rows: [
+          { type: "key_value" as const, label: "Platform", value: "Codex" },
+          { type: "key_value" as const, label: "Model", value: "Example model" },
+          { type: "key_value" as const, label: "Chat URL", value: "https://example.com/chat" },
+        ] }],
+      };
+      const comments = await db.insert(issueComments).values([
+        { companyId, issueId: openTask.id, body: "Progress and next steps", authorUserId: owner, metadata: provenance },
+        { companyId, issueId: openTask.id, body: "Ordinary comment", authorUserId: owner, metadata: provenance },
+        { companyId, issueId: privateTask.id, body: "Private passive update", authorUserId: owner },
+        { companyId, issueId: openTask.id, body: "Deleted comment", authorUserId: owner, deletedAt: new Date() },
+      ]).returning();
+      await db.insert(activityLog).values([comments[0]!, comments[2]!, comments[3]!].map(comment => ({
+        companyId, entityId: comment.issueId, entityType: "issue", actorId: owner, actorType: "user",
+        action: "issue.comment_added", details: { commentId: comment.id, source: "external_ai_passive" },
+      })));
+      const history = await request(appFor(colleague)).get(historyPath);
+      expect(history.status).toBe(200);
+      expect(history.body).toEqual([expect.objectContaining({
+        id: comments[0]!.id, recordedByUserId: owner, discussion: "Progress and next steps",
+        platform: "Codex", model: "Example model", chatUrl: "https://example.com/chat",
+        task: expect.objectContaining({ id: openTask.id, title: "External work" }),
+      })]);
+      expect((await request(appFor(randomUUID(), false)).get(historyPath)).status).toBe(403);
+
       expect((await request(app).get(path)).body).toBeNull();
       expect(
         await issueService(db).getConversation(companyId, agentId, owner),
