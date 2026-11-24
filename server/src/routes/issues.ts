@@ -94,6 +94,8 @@ import {
   issueRelations,
   issueRecoveryActions,
   issueThreadInteractions,
+  issueWatchdogs,
+  fastResponseRequests,
   issues as issueRows,
   issueWorkProducts,
   instanceUserRoles,
@@ -14323,6 +14325,60 @@ export function issueRoutes(
     if (active) throw conflict("An agent currently owns execution. Wait for it to finish, or manage execution in Paperclip.", { code: "MCP_ACTIVE_EXECUTION" });
   }
 
+  function isPassiveExternalRequest(req: Request) {
+    if (req.query.passiveExternal !== "true") return false;
+    if (req.actor.source !== "mcp_oauth" || req.actor.type !== "board" || !req.actor.userId) {
+      throw forbidden("Passive external collaboration requires an authenticated assistant connection");
+    }
+    return true;
+  }
+
+  // Deliberately limit the first version to ordinary standalone, unassigned
+  // tasks. Never suppress dependency, review, monitor or active-run behavior.
+  async function assertPassiveExternalTask(query: IssueQueueDb, issue: NonNullable<Awaited<ReturnType<typeof svc.getByIdForUpdate>>>) {
+    await assertMcpTaskParticipation(query, issue);
+    const reject = () => { throw conflict("Passive collaboration requires an unassigned standalone task without active automation or review", { code: "MCP_PASSIVE_TASK_REQUIRED" }); };
+    if (issue.assigneeAgentId || issue.parentId || issue.conversationAgentId ||
+      issue.executionPolicy || issue.executionState ||
+      issue.harnessKind || issue.checkoutRunId || issue.executionRunId ||
+      issue.workMode !== "standard" ||
+      (issue.reviewPolicy != null && issue.reviewPolicy !== "anyone") ||
+      !["backlog", "todo", "done", "cancelled"].includes(issue.status)) reject();
+    // A linked approval is a governance boundary even before a review is pending.
+    const [approval] = await query.select({ id: issueApprovals.approvalId }).from(issueApprovals).where(and(
+      eq(issueApprovals.companyId, issue.companyId), eq(issueApprovals.issueId, issue.id),
+    )).limit(1);
+    const [relation] = await query.select({ id: issueRelations.id }).from(issueRelations).where(and(
+      eq(issueRelations.companyId, issue.companyId),
+      or(eq(issueRelations.issueId, issue.id), eq(issueRelations.relatedIssueId, issue.id)),
+    )).limit(1);
+    const [child] = await query.select({ id: issueRows.id }).from(issueRows).where(and(
+      eq(issueRows.companyId, issue.companyId), eq(issueRows.parentId, issue.id),
+    )).limit(1);
+    const [pending] = await query.select({ id: issueThreadInteractions.id }).from(issueThreadInteractions).where(and(
+      eq(issueThreadInteractions.companyId, issue.companyId), eq(issueThreadInteractions.issueId, issue.id),
+      eq(issueThreadInteractions.status, "pending"),
+    )).limit(1);
+    const [watchdog] = await query.select({ id: issueWatchdogs.id }).from(issueWatchdogs).where(and(
+      eq(issueWatchdogs.companyId, issue.companyId),
+      or(eq(issueWatchdogs.issueId, issue.id), eq(issueWatchdogs.watchdogIssueId, issue.id)),
+      eq(issueWatchdogs.status, "active"),
+    )).limit(1);
+    const [wake] = await query.select({ id: agentWakeupRequests.id }).from(agentWakeupRequests).where(and(
+      eq(agentWakeupRequests.companyId, issue.companyId),
+      inArray(agentWakeupRequests.status, ["queued", "deferred", "claimed"]),
+      sql`${agentWakeupRequests.payload}->>'issueId' = ${issue.id}`,
+    )).limit(1);
+    const [fast] = await query.select({ id: fastResponseRequests.id }).from(fastResponseRequests).where(and(
+      eq(fastResponseRequests.companyId, issue.companyId), eq(fastResponseRequests.issueId, issue.id),
+      inArray(fastResponseRequests.status, ["pending", "running"]),
+    )).limit(1);
+    const [conversation] = await query.select({ id: chatConversations.id }).from(chatConversations).where(
+      eq(chatConversations.issueId, issue.id),
+    ).limit(1);
+    if (approval || relation || child || pending || watchdog || wake || fast || conversation) reject();
+  }
+
   /**
    * A native run reports its outcome through paperclip_finish/paperclip_block,
    * and the status arbiter applies the task status. A status change sent here
@@ -14421,6 +14477,14 @@ export function issueRoutes(
       const mcpParticipationChange = req.actor.source === "mcp_oauth" &&
         ["status", "assigneeAgentId", "assigneeUserId", "blockedByIssueIds", "parentId", "projectId"].some(key => req.body[key] !== undefined);
       if (mcpParticipationChange) await assertMcpTaskParticipation(db, existing);
+      const passiveExternal = isPassiveExternalRequest(req);
+      if (passiveExternal) {
+        if (Object.keys(req.body).some(key => key !== "status") ||
+          !["backlog", "todo", "done", "cancelled"].includes(req.body.status)) {
+          throw unprocessable("Passive status updates accept only backlog, todo, done or cancelled");
+        }
+        await assertPassiveExternalTask(db, existing);
+      }
 
       assertNoAgentHostWorkspaceCommandMutation(
         req,
@@ -15366,6 +15430,7 @@ export function issueRoutes(
         const lockedExisting = await svc.getByIdForUpdate(id, tx);
         if (!lockedExisting) return false;
         if (mcpReviewSensitiveMutation) await assertMcpTaskParticipation(tx ?? db, lockedExisting);
+        if (passiveExternal) await assertPassiveExternalTask(tx ?? db, lockedExisting);
         const lockedPolicyChangeRequested =
           req.body.reviewPolicy !== undefined &&
           req.body.reviewPolicy !== lockedExisting.reviewPolicy;
@@ -16328,7 +16393,8 @@ export function issueRoutes(
       });
 
       // Merge all wakeups from this update into one enqueue per agent to avoid duplicate runs.
-      void (async () => {
+      // Passive operations have already rejected related/governed tasks under lock.
+      if (!passiveExternal) void (async () => {
         type WakeupRequest = NonNullable<
           Parameters<typeof heartbeat.wakeup>[1]
         >;
@@ -16760,7 +16826,7 @@ export function issueRoutes(
         }
       })();
 
-      await queueTaskWatchdogEvaluation(issue, actor.runId);
+      if (!passiveExternal) await queueTaskWatchdogEvaluation(issue, actor.runId);
       const changes = issueResponse.changes ?? {};
       if (prefersMinimalIssueUpdateResponse(req)) {
         res.setHeader("Preference-Applied", "return=minimal");
@@ -19244,6 +19310,47 @@ export function issueRoutes(
         "Issue not found",
       );
       if (!issue) return;
+      if (isPassiveExternalRequest(req)) {
+        if (Object.keys(req.body).some(key => !["body", "clientRequestId", "metadata"].includes(key)) || !req.body.clientRequestId) {
+          throw unprocessable("Passive comments require a body and client request ID");
+        }
+        if (!(await assertAgentIssueCommentAllowed(req, res, issue))) return;
+        if (!(await assertBoardCommentNotPaused(req, res, issue))) return;
+        // Allow only the provenance rows constructed by the external MCP tool.
+        // They are self-reported, not an agent identity or a review decision.
+        const metadata = req.body.metadata;
+        if (metadata && (
+          Object.keys(metadata).some(key => !["version", "sections"].includes(key)) ||
+          metadata.sections.length !== 1 ||
+          metadata.sections[0].title !== "External AI provenance (self-reported)" ||
+          metadata.sections[0].rows.some((row: { type: string; label?: string }) =>
+            row.type !== "key_value" || !["Platform", "Model", "Chat URL"].includes(row.label ?? ""))
+        )) throw unprocessable("Only external AI provenance is accepted");
+        const userId = req.actor.userId!;
+        const publications: ActivityPublication[] = [];
+        const comment = await db.transaction(async tx => {
+          const locked = await svc.getByIdForUpdate(issue.id, tx);
+          if (!locked || locked.companyId !== issue.companyId) throw notFound("Issue not found");
+          await assertPassiveExternalTask(tx, locked);
+          const [accepted] = await tx.select({ id: issueComments.id }).from(issueComments).where(and(
+            eq(issueComments.issueId, issue.id), eq(issueComments.authorUserId, userId),
+            eq(issueComments.clientRequestId, req.body.clientRequestId),
+          ));
+          const saved = await svc.addComment(issue.id, req.body.body, { userId }, {
+            clientRequestId: req.body.clientRequestId, authorType: "user", metadata,
+          }, tx);
+          if (!accepted) await logActivity(tx as unknown as Db, {
+            companyId: issue.companyId, actorType: "user", actorId: userId,
+            action: "issue.comment_added", entityType: "issue", entityId: issue.id,
+            details: { commentId: saved.id, identifier: issue.identifier, source: "external_ai_passive" },
+          }, publications);
+          return saved;
+        });
+        for (const publication of publications) publishActivity(publication);
+        await issueReferencesSvc.syncComment(comment.id);
+        res.status(201).json(comment);
+        return;
+      }
       if (issue.conversationAgentId && req.actor.type === "board") {
         if (!(await instanceSettings.getExperimental()).enableAgentChat) throw notFound("Agent Chat is disabled");
         if (!req.actor.userId) throw forbidden("Board user access required");

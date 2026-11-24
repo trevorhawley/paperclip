@@ -60,6 +60,20 @@ export function createMcpApiDispatch(api: Router, parentLocals?: Record<string, 
   };
 }
 
+/** Expose only self-reported external provenance, not arbitrary internal comment metadata. */
+function publicTaskComment(value: unknown) {
+  const comment = pick(value, commentFields);
+  const metadata = object(object(value).metadata);
+  const section = rows(metadata.sections).map(object).find(s => s.title === "External AI provenance (self-reported)");
+  if (!section) return comment;
+  const provenance = rows(section.rows).map(object).filter(row =>
+    row.type === "key_value" &&
+    ["Platform", "Model", "Chat URL"].includes(String(row.label)) &&
+    typeof row.value === "string"
+  ).map(row => ({ type: "key_value", label: row.label, value: row.value }));
+  return { ...comment, metadata: { version: 1, sections: [{ title: section.title, rows: provenance }] } };
+}
+
 export const publicMcpCapabilities: Capability[] = [
   {
     name: "paperclip_connection", description: "Identify the connected person, explicitly authorized company and permissions. This connection acts as the person; assigning a task never impersonates its agent.",
@@ -100,7 +114,7 @@ export const publicMcpCapabilities: Capability[] = [
       const comments = await api(p, "GET", base + "/comments?limit=30");
       const activity = await api(p, "GET", base + "/activity?limit=30");
       return { task: pick(issue, taskFields), url: origin + "/" + pathId(p.company.issuePrefix) + "/issues/" + pathId(object(issue).identifier ?? a.taskId),
-        comments: rows(comments).map((v) => pick(v, commentFields)),
+        comments: rows(comments).map(publicTaskComment),
         history: rows(activity).slice(0, 30).map((v) => pick(v, ["id", "action", "actorType", "actorId", "createdAt"])) };
     },
   },
@@ -117,6 +131,46 @@ export const publicMcpCapabilities: Capability[] = [
       return { task: pick(result, taskFields), url: origin + "/" + pathId(p.company.issuePrefix) + "/issues/" + pathId(object(result).identifier ?? object(result).id),
         scheduling: "Submitted to normal Paperclip scheduling. Creation does not guarantee execution has started." };
     },
+  },
+  {
+    name: "paperclip_create_passive_task", write: true,
+    description: "Create an unassigned backlog task in an existing project for external AI collaboration. Does not delegate to an agent. Use a separate explicit handoff when execution is intended. Reuse requestId on retries.",
+    schema: z.object({ ...company, requestId, title: z.string().trim().min(1).max(200), description: z.string().max(50000), projectId: z.uuid() }).strict(),
+    run: async (p, a, api) => ({ task: pick(await api(p, "POST", `/companies/${a.companyId}/issues`, {
+      title: a.title, description: a.description, projectId: a.projectId, status: "backlog",
+      assigneeAgentId: null, assigneeUserId: null, executionPolicy: null,
+      idempotencyKey: `mcp:${hashMcpSecret(p.grant.companyId + ":" + p.grant.userId)}:${a.requestId}`,
+    }), taskFields) }),
+  },
+  {
+    name: "paperclip_add_passive_comment", write: true,
+    description: "Record discussion as the authenticated person without waking agents. Only for unassigned standalone tasks without review or active automation. Optional platform, model and chat URL are self-reported provenance. Reuse requestId on retries.",
+    schema: z.object({ ...task, requestId, body: z.string().trim().min(1).max(50000),
+      platform: z.string().trim().min(1).max(100).optional(),
+      model: z.string().trim().min(1).max(200).optional(),
+      chatUrl: z.string().url().max(1000).refine(v => v.startsWith("https://") || v.startsWith("http://"), "Use an HTTP(S) chat URL").optional(),
+    }).strict(),
+    run: async (p, a, api) => {
+      const provenance = [["Platform", a.platform], ["Model", a.model], ["Chat URL", a.chatUrl]]
+        .filter(([, value]) => typeof value === "string")
+        .map(([label, value]) => ({ type: "key_value", label, value }));
+      return { comment: pick(await api(p, "POST", `/issues/${pathId(a.taskId)}/comments?passiveExternal=true`, {
+        body: a.body, clientRequestId: a.requestId,
+        ...(provenance.length ? { metadata: { version: 1, sections: [{ title: "External AI provenance (self-reported)", rows: provenance }] } } : {}),
+      }), [...commentFields, "metadata"]) };
+    },
+  },
+  {
+    name: "paperclip_set_passive_task_status", write: true,
+    description: "Change the status of an unassigned standalone external task without launching agents. Refuses tasks with active execution, dependencies, or review. Reuse requestId on retries.",
+    schema: z.object({ ...task, requestId, status: z.enum(["backlog", "todo", "done", "cancelled"]) }).strict(),
+    run: async (p, a, api) => ({ task: pick(await api(p, "PATCH", `/issues/${pathId(a.taskId)}?passiveExternal=true`, { status: a.status }), taskFields) }),
+  },
+  {
+    name: "paperclip_handoff_task", write: true, destructive: true,
+    description: "Explicitly assign an existing task to a native agent and move it to todo. May enqueue execution and consume model budget. Use only when execution is requested; normal permissions and review guards apply.",
+    schema: z.object({ ...task, requestId, assigneeAgentId: z.uuid() }).strict(),
+    run: async (p, a, api) => ({ task: pick(await api(p, "PATCH", `/issues/${pathId(a.taskId)}`, { assigneeAgentId: a.assigneeAgentId, assigneeUserId: null, status: "todo" }), taskFields) }),
   },
   {
     name: "paperclip_add_comment", write: true,

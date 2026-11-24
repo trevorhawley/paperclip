@@ -8,7 +8,7 @@ import { projectRoutes } from "../routes/projects.js";
 import { agentRoutes } from "../routes/agents.js";
 import { companySkillRoutes } from "../routes/company-skills.js";
 import { MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
-import { mcpAttachmentUploads, mcpFileTickets, principalPermissionGrants, heartbeatRuns, issueAccessGrants } from "@paperclipai/db";
+import { mcpAttachmentUploads, mcpFileTickets, principalPermissionGrants, heartbeatRuns, issueAccessGrants, agentWakeupRequests, fastResponseRequests, projects, approvals, issueApprovals } from "@paperclipai/db";
 import { createHmac, createHash, randomBytes, randomUUID } from "node:crypto";
 import express, { type Request } from "express";
 import request from "supertest";
@@ -26,6 +26,7 @@ import { documentService } from "../services/documents.js";
 import { createStorageService } from "../storage/service.js";
 import { createLocalDiskStorageProvider } from "../storage/local-disk-provider.js";
 import * as assignmentWakeups from "../services/issue-assignment-wakeup.js";
+import * as serviceIndex from "../services/index.js";
 import { assertCompanyAccess } from "../routes/authz.js";
 import { actorMiddleware } from "../middleware/auth.js";
 import { boardMutationGuard } from "../middleware/board-mutation-guard.js";
@@ -623,6 +624,128 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
       expect(paused.scheduling).toContain("does not guarantee execution has started");
       expect((await db.select().from(agents).where(eq(agents.id, agent!.id)))[0]?.status).toBe("paused");
     } finally { wake.mockRestore(); }
+  });
+
+  it("records passive collaboration without runs or wakeups, including an agent mention", async () => {
+    const f = await fixture();
+    const [project] = await db.insert(projects).values({ companyId: f.company.id, name: "Synthetic project" }).returning();
+    const [agent] = await db.insert(agents).values({ companyId: f.company.id, name: "Synthetic agent", role: "researcher", adapterType: "process", status: "idle" }).returning();
+    const api = express.Router(); api.use(boardMutationGuard());
+    api.use(issueRoutes(db, createStorageService(createLocalDiskStorageProvider("/tmp/paperclip-public-mcp-unused-storage"))));
+    api.use(activityRoutes(db));
+    const execute = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
+    const create = { companyId: f.company.id, requestId: randomUUID(), title: "External research", description: "Synthetic task", projectId: project!.id };
+    const result = await execute(f.tokens.access_token, "paperclip_create_passive_task", create);
+    expect(result).toHaveProperty("task.assigneeAgentId", null);
+    expect(result).toHaveProperty("task.status", "backlog");
+    expect(await execute(f.tokens.access_token, "paperclip_create_passive_task", create)).toEqual(result);
+    if (!("task" in result) || !result.task || typeof result.task !== "object" || !("id" in result.task) || typeof result.task.id !== "string") {
+      throw new Error("Expected a created passive task with a string ID");
+    }
+    const taskId = result.task.id;
+    const args = { companyId: f.company.id, taskId, requestId: randomUUID(), body: `Progress: @[Synthetic agent](agent://${agent!.id})`, platform: "Example AI", model: "example-model", chatUrl: "https://example.com/thread" };
+    const feedback = await execute(f.tokens.access_token, "paperclip_add_passive_comment", args);
+    expect(feedback).toHaveProperty("comment.authorUserId", f.actor.userId);
+    expect(feedback).toHaveProperty("comment.authorAgentId", null);
+    expect(feedback).toHaveProperty("comment.metadata.sections.0.rows", expect.arrayContaining([
+      expect.objectContaining({ label: "Platform", value: "Example AI" }),
+      expect.objectContaining({ label: "Model", value: "example-model" }),
+      expect.objectContaining({ label: "Chat URL", value: "https://example.com/thread" }),
+    ]));
+    expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", args)).toEqual(feedback);
+    for (const status of ["todo", "done"]) {
+      const statusArgs = { companyId: f.company.id, taskId, requestId: randomUUID(), status };
+      const updated = await execute(f.tokens.access_token, "paperclip_set_passive_task_status", statusArgs);
+      expect(updated).toHaveProperty("task.status", status);
+      expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", statusArgs)).toEqual(updated);
+    }
+    // A later assistant conversation must be able to recover both the work and its provenance.
+    const later = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
+    const read = await later(f.tokens.access_token, "paperclip_read_task", { companyId: f.company.id, taskId });
+    expect(read).toHaveProperty("task.status", "done");
+    expect(read).toHaveProperty("comments.0.authorUserId", f.actor.userId);
+    expect(read).toHaveProperty("comments.0.body", args.body);
+    expect(read).toHaveProperty("comments.0.metadata.sections.0.rows", expect.arrayContaining([
+      expect.objectContaining({ label: "Platform", value: args.platform }),
+      expect.objectContaining({ label: "Model", value: args.model }),
+      expect.objectContaining({ label: "Chat URL", value: args.chatUrl }),
+    ]));
+    const other = await fixture();
+    await expect(later(other.tokens.access_token, "paperclip_read_task", { companyId: f.company.id, taskId })).rejects.toThrow();
+    await expect(later(other.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).rejects.toThrow();
+    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, taskId))).toHaveLength(1);
+    expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.companyId, f.company.id))).toHaveLength(0);
+    expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, f.company.id))).toHaveLength(0);
+    expect(await db.select().from(fastResponseRequests).where(eq(fastResponseRequests.companyId, f.company.id))).toHaveLength(0);
+    // Governance and special task modes are not eligible for passive writes.
+    const expectPassiveRejection = async () => {
+      expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).toMatchObject({ outcome: "rejected", status: 409 });
+      expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status: "todo" })).toMatchObject({ outcome: "rejected", status: 409 });
+    };
+    await db.update(issues).set({ reviewPolicy: "human_only" }).where(eq(issues.id, taskId));
+    await expectPassiveRejection();
+    await db.update(issues).set({ reviewPolicy: null, workMode: "planning" }).where(eq(issues.id, taskId));
+    await expectPassiveRejection();
+    await db.update(issues).set({ workMode: "standard" }).where(eq(issues.id, taskId));
+    const [approval] = await db.insert(approvals).values({
+      companyId: f.company.id, type: "synthetic_review", payload: {},
+    }).returning();
+    await db.insert(issueApprovals).values({ companyId: f.company.id, issueId: taskId, approvalId: approval!.id });
+    await expectPassiveRejection();
+    await db.delete(issueApprovals).where(eq(issueApprovals.issueId, taskId));
+    await db.delete(approvals).where(eq(approvals.id, approval!.id));
+    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, taskId))).toHaveLength(1);
+    expect((await db.select().from(issues).where(eq(issues.id, taskId)))[0]?.status).toBe("done");
+    await db.update(issues).set({ assigneeAgentId: agent!.id }).where(eq(issues.id, taskId));
+    expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).toMatchObject({ outcome: "rejected", status: 409 });
+    expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status: "todo" })).toMatchObject({ outcome: "rejected", status: 409 });
+  });
+
+  it("hands passive work to native scheduling only on an explicit handoff", async () => {
+    const f = await fixture();
+    const [project] = await db.insert(projects).values({ companyId: f.company.id, name: "Handoff project" }).returning();
+    const [agent] = await db.insert(agents).values({ companyId: f.company.id, name: "Handoff agent", role: "researcher", adapterType: "process", status: "idle" }).returning();
+    // Exercise the real authenticated task routes, but intercept the final
+    // scheduling boundary so this acceptance test cannot start a model/process.
+    const heartbeat = serviceIndex.heartbeatService(db);
+    const wake = vi.spyOn(heartbeat, "wakeup").mockResolvedValue(null);
+    const factory = vi.spyOn(serviceIndex, "heartbeatService").mockReturnValue(heartbeat);
+    try {
+      const api = express.Router(); api.use(boardMutationGuard());
+      api.use(issueRoutes(db, createStorageService(createLocalDiskStorageProvider("/tmp/paperclip-public-mcp-unused-storage"))));
+      api.use(activityRoutes(db));
+      const execute = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
+      const created = await execute(f.tokens.access_token, "paperclip_create_passive_task", {
+        companyId: f.company.id, requestId: randomUUID(), title: "External work for handoff", description: "Synthetic acceptance", projectId: project!.id,
+      });
+      const [task] = await db.select().from(issues).where(eq(issues.companyId, f.company.id));
+      expect(created).toHaveProperty("task.id", task!.id);
+      expect(created).toHaveProperty("task.assigneeAgentId", null);
+      const args = { companyId: f.company.id, taskId: task!.id, requestId: randomUUID(), assigneeAgentId: agent!.id };
+      await execute(f.tokens.access_token, "paperclip_add_passive_comment", { companyId: f.company.id, taskId: task!.id, requestId: randomUUID(), body: "Ready for deliberate handoff." });
+      expect(wake).not.toHaveBeenCalled();
+      const other = await fixture();
+      await expect(execute(other.tokens.access_token, "paperclip_handoff_task", args)).rejects.toThrow();
+      expect(wake).not.toHaveBeenCalled();
+      const delegated = await execute(f.tokens.access_token, "paperclip_handoff_task", args);
+      expect(delegated).toHaveProperty("task.assigneeAgentId", agent!.id);
+      expect(delegated).toHaveProperty("task.status", "todo");
+      await vi.waitFor(() => expect(wake).toHaveBeenCalledTimes(1));
+      expect(wake).toHaveBeenCalledWith(agent!.id, expect.objectContaining({
+        source: "assignment", reason: "issue_assigned",
+        requestedByActorType: "user", requestedByActorId: f.actor.userId,
+        payload: expect.objectContaining({ issueId: task!.id }),
+      }));
+      expect(await execute(f.tokens.access_token, "paperclip_handoff_task", args)).toEqual(delegated);
+      expect(wake).toHaveBeenCalledTimes(1);
+      expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", {
+        companyId: f.company.id, taskId: task!.id, requestId: randomUUID(), body: "Must not bypass assigned-task safeguards.",
+      })).toMatchObject({ outcome: "rejected", status: 409 });
+      expect(wake).toHaveBeenCalledTimes(1);
+    } finally {
+      factory.mockRestore();
+      wake.mockRestore();
+    }
   });
 
   it("requires fresh explicit configuration consent and never upscopes old grants", async () => {
