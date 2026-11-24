@@ -637,7 +637,10 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
     expect(result).toHaveProperty("task.assigneeAgentId", null);
     expect(result).toHaveProperty("task.status", "backlog");
     expect(await execute(f.tokens.access_token, "paperclip_create_passive_task", create)).toEqual(result);
-    const taskId = (result.task as { id: string }).id;
+    if (!("task" in result) || !result.task || typeof result.task !== "object" || !("id" in result.task) || typeof result.task.id !== "string") {
+      throw new Error("Expected a created passive task with a string ID");
+    }
+    const taskId = result.task.id;
     const args = { companyId: f.company.id, taskId, requestId: randomUUID(), body: `Progress: @[Synthetic agent](agent://${agent!.id})`, platform: "Example AI", model: "example-model", chatUrl: "https://example.com/thread" };
     const feedback = await execute(f.tokens.access_token, "paperclip_add_passive_comment", args);
     expect(feedback).toHaveProperty("comment.authorUserId", f.actor.userId);
