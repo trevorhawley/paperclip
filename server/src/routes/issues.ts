@@ -14340,7 +14340,14 @@ export function issueRoutes(
     const reject = () => { throw conflict("Passive collaboration requires an unassigned standalone task without active automation or review", { code: "MCP_PASSIVE_TASK_REQUIRED" }); };
     if (issue.assigneeAgentId || issue.parentId || issue.conversationAgentId ||
       issue.executionPolicy || issue.executionState ||
-      issue.harnessKind || issue.checkoutRunId || issue.executionRunId || issue.status === "blocked") reject();
+      issue.harnessKind || issue.checkoutRunId || issue.executionRunId ||
+      issue.workMode !== "standard" ||
+      (issue.reviewPolicy != null && issue.reviewPolicy !== "anyone") ||
+      !["backlog", "todo", "done", "cancelled"].includes(issue.status)) reject();
+    // A linked approval is a governance boundary even before a review is pending.
+    const [approval] = await query.select({ id: issueApprovals.approvalId }).from(issueApprovals).where(and(
+      eq(issueApprovals.companyId, issue.companyId), eq(issueApprovals.issueId, issue.id),
+    )).limit(1);
     const [relation] = await query.select({ id: issueRelations.id }).from(issueRelations).where(and(
       eq(issueRelations.companyId, issue.companyId),
       or(eq(issueRelations.issueId, issue.id), eq(issueRelations.relatedIssueId, issue.id)),
@@ -14369,7 +14376,7 @@ export function issueRoutes(
     const [conversation] = await query.select({ id: chatConversations.id }).from(chatConversations).where(
       eq(chatConversations.issueId, issue.id),
     ).limit(1);
-    if (relation || child || pending || watchdog || wake || fast || conversation) reject();
+    if (approval || relation || child || pending || watchdog || wake || fast || conversation) reject();
   }
 
   /**
