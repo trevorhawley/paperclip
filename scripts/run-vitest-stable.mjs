@@ -530,13 +530,25 @@ async function runGeneralGroup(routeTests, groupName, shardIndex = null, shardCo
     return;
   }
   if (groupName === generalServerNativeRunnerGroupName) {
+    // Hosted fork runners have limited CPU and no shared upstream Rust cache.
+    // Dot Runner synchronously invokes cargo with a five-minute timeout; run it
+    // alone so other native suites cannot hold the same Cargo build lock.
+    const forkMode = process.env.PAPERCLIP_FORK_CI_NATIVE_RUNNER_MODE;
+    const dotSuite = "server/src/__tests__/dot-runner.test.ts";
+    const splitDot = forkMode === "split" || forkMode === "dot-only";
+    if (splitDot) {
+      if (!nativeRunnerSuites.includes(dotSuite)) fail("Dot Runner suite missing from native runner inventory");
+      await runVitest(["--project", "@paperclipai/server", ...serializedServerVitestArgs, dotSuite],
+        "fork isolated Dot Runner suite");
+      if (forkMode === "dot-only") return; // Diagnostic workflow only, never full CI.
+    }
     await runVitest(
       ["--project", "@paperclipai/server",
         // Each file owns its database, home, and processes. Keep cases serial,
         // but overlap long real lease windows in four isolated fork workers.
         ...(hasSharedTestDatabase ? serializedServerVitestArgs
           : ["--pool=forks", "--isolate", "--fileParallelism", "--maxWorkers=4"]),
-        ...nativeRunnerSuites],
+        ...(splitDot ? nativeRunnerSuites.filter(file => file !== dotSuite) : nativeRunnerSuites)],
       "native runner vertical-slice suite",
     );
     return;
