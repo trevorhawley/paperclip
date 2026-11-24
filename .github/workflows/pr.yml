@@ -32,7 +32,63 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lane: [policy, typecheck, build, general-tests, serialized-tests]
+        # Use upstream's suite partitioning, including a separate native-runner
+        # lane so the workflow named PR does not silently omit those suites.
+        include:
+          - lane: policy
+          - lane: typecheck
+          - lane: build
+          - lane: serialized-tests
+          - lane: general-server-1
+            group: general-server-without-chat-or-native-runner
+            shard_index: 0
+            shard_count: 6
+          - lane: general-server-2
+            group: general-server-without-chat-or-native-runner
+            shard_index: 1
+            shard_count: 6
+          - lane: general-server-3
+            group: general-server-without-chat-or-native-runner
+            shard_index: 2
+            shard_count: 6
+          - lane: general-server-4
+            group: general-server-without-chat-or-native-runner
+            shard_index: 3
+            shard_count: 6
+          - lane: general-server-5
+            group: general-server-without-chat-or-native-runner
+            shard_index: 4
+            shard_count: 6
+          - lane: general-server-6
+            group: general-server-without-chat-or-native-runner
+            shard_index: 5
+            shard_count: 6
+          - lane: general-chat-1
+            group: general-chat
+            shard_index: 0
+            shard_count: 3
+          - lane: general-chat-2
+            group: general-chat
+            shard_index: 1
+            shard_count: 3
+          - lane: general-chat-3
+            group: general-chat
+            shard_index: 2
+            shard_count: 3
+          - lane: general-workspaces-a-1
+            group: general-workspaces-a
+            shard_index: 0
+            shard_count: 2
+          - lane: general-workspaces-a-2
+            group: general-workspaces-a
+            shard_index: 1
+            shard_count: 2
+          - lane: general-workspaces-b
+            group: general-workspaces-b
+          - lane: general-workspaces-c
+            group: general-workspaces-c
+          - lane: general-server-native-runner
+            group: general-server-native-runner
     env:
       CI: 'true'
       NPM_CONFIG_AUDIT: 'false'
@@ -71,8 +127,17 @@ jobs:
         if: matrix.lane == 'build'
         run: pnpm build
       - name: General Vitest suites
-        if: matrix.lane == 'general-tests'
-        run: pnpm test:run:general
+        if: matrix.group != ''
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+          SHARD_INDEX: ${{ matrix.shard_index }}
+          SHARD_COUNT: ${{ matrix.shard_count }}
+        run: |
+          if [ -n "$SHARD_COUNT" ]; then
+            pnpm test:run:general -- --group "$TEST_GROUP" --shard-index "$SHARD_INDEX" --shard-count "$SHARD_COUNT"
+          else
+            pnpm test:run:general -- --group "$TEST_GROUP"
+          fi
       - name: Serialized Vitest suites
         if: matrix.lane == 'serialized-tests'
         run: pnpm test:run:serialized
