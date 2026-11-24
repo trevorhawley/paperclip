@@ -8,7 +8,7 @@ import { projectRoutes } from "../routes/projects.js";
 import { agentRoutes } from "../routes/agents.js";
 import { companySkillRoutes } from "../routes/company-skills.js";
 import { MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
-import { mcpAttachmentUploads, mcpFileTickets, principalPermissionGrants, heartbeatRuns, issueAccessGrants, agentWakeupRequests, fastResponseRequests, projects } from "@paperclipai/db";
+import { mcpAttachmentUploads, mcpFileTickets, principalPermissionGrants, heartbeatRuns, issueAccessGrants, agentWakeupRequests, fastResponseRequests, projects, approvals, issueApprovals } from "@paperclipai/db";
 import { createHmac, createHash, randomBytes, randomUUID } from "node:crypto";
 import express, { type Request } from "express";
 import request from "supertest";
@@ -655,6 +655,25 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
     expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.companyId, f.company.id))).toHaveLength(0);
     expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, f.company.id))).toHaveLength(0);
     expect(await db.select().from(fastResponseRequests).where(eq(fastResponseRequests.companyId, f.company.id))).toHaveLength(0);
+    // Governance and special task modes are not eligible for passive writes.
+    const expectPassiveRejection = async () => {
+      expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).toMatchObject({ outcome: "rejected", status: 409 });
+      expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status: "todo" })).toMatchObject({ outcome: "rejected", status: 409 });
+    };
+    await db.update(issues).set({ reviewPolicy: "human_only" }).where(eq(issues.id, taskId));
+    await expectPassiveRejection();
+    await db.update(issues).set({ reviewPolicy: null, workMode: "planning" }).where(eq(issues.id, taskId));
+    await expectPassiveRejection();
+    await db.update(issues).set({ workMode: "standard" }).where(eq(issues.id, taskId));
+    const [approval] = await db.insert(approvals).values({
+      companyId: f.company.id, type: "synthetic_review", payload: {},
+    }).returning();
+    await db.insert(issueApprovals).values({ companyId: f.company.id, issueId: taskId, approvalId: approval!.id });
+    await expectPassiveRejection();
+    await db.delete(issueApprovals).where(eq(issueApprovals.issueId, taskId));
+    await db.delete(approvals).where(eq(approvals.id, approval!.id));
+    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, taskId))).toHaveLength(1);
+    expect((await db.select().from(issues).where(eq(issues.id, taskId)))[0]?.status).toBe("done");
     await db.update(issues).set({ assigneeAgentId: agent!.id }).where(eq(issues.id, taskId));
     expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).toMatchObject({ outcome: "rejected", status: 409 });
     expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status: "todo" })).toMatchObject({ outcome: "rejected", status: 409 });
