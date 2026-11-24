@@ -62,7 +62,8 @@ jobs:
           pnpm check:no-git-push
           pnpm check:module-boundaries
           pnpm check:token-gates
-          pnpm -r --if-present lint
+          # The pinned upstream has no ESLint configuration or Hermes ESLint dependency.
+          # Run its supported policy gates instead of an unsupported recursive lint command.
       - name: Typecheck
         if: matrix.lane == 'typecheck'
         run: pnpm typecheck
