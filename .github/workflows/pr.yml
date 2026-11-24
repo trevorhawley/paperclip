@@ -4,7 +4,7 @@ run-name: >-
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
 
 permissions:
   actions: read
@@ -13,7 +13,189 @@ permissions:
 
 jobs:
   ci:
-    if: github.event.action != 'labeled' || github.event.label.name == 'profile-ci' || github.event.label.name == 'full-ci'
+    if: github.base_ref != 'dev' && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'labeled' && (github.event.label.name == 'profile-ci' || github.event.label.name == 'full-ci')))
     # Master requires CODEOWNERS review for .github/**, including this workflow.
     # The AWS runner group permits pr-trusted.yml@refs/heads/master.
     uses: paperclipai/paperclip/.github/workflows/pr-trusted.yml@master
+
+  fork-ci:
+    name: Fork / ${{ matrix.lane }}
+    concurrency:
+      group: fork-ci-${{ github.event.pull_request.number }}-${{ matrix.lane }}
+      cancel-in-progress: true
+    if: github.base_ref == 'dev' && github.event.action != 'labeled' && (github.event.action != 'unlabeled' || github.event.label.name == 'fork-ci-native-runner-only') && !(github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'fork-ci-native-runner-only'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Use upstream's suite partitioning, including a separate native-runner
+        # lane so the workflow named PR does not silently omit those suites.
+        include:
+          - lane: policy
+          - lane: typecheck
+          - lane: build
+          - lane: serialized-tests
+          - lane: general-server-1
+            group: general-server-without-chat-or-native-runner
+            shard_index: 0
+            shard_count: 6
+          - lane: general-server-2
+            group: general-server-without-chat-or-native-runner
+            shard_index: 1
+            shard_count: 6
+          - lane: general-server-3
+            group: general-server-without-chat-or-native-runner
+            shard_index: 2
+            shard_count: 6
+          - lane: general-server-4
+            group: general-server-without-chat-or-native-runner
+            shard_index: 3
+            shard_count: 6
+          - lane: general-server-5
+            group: general-server-without-chat-or-native-runner
+            shard_index: 4
+            shard_count: 6
+          - lane: general-server-6
+            group: general-server-without-chat-or-native-runner
+            shard_index: 5
+            shard_count: 6
+          - lane: general-chat-1
+            group: general-chat
+            shard_index: 0
+            shard_count: 3
+          - lane: general-chat-2
+            group: general-chat
+            shard_index: 1
+            shard_count: 3
+          - lane: general-chat-3
+            group: general-chat
+            shard_index: 2
+            shard_count: 3
+          - lane: general-workspaces-a-1
+            group: general-workspaces-a
+            shard_index: 0
+            shard_count: 2
+          - lane: general-workspaces-a-2
+            group: general-workspaces-a
+            shard_index: 1
+            shard_count: 2
+          - lane: general-workspaces-b
+            group: general-workspaces-b
+          - lane: general-workspaces-c
+            group: general-workspaces-c
+          - lane: general-server-native-runner
+            group: general-server-native-runner
+    env:
+      CI: 'true'
+      NPM_CONFIG_AUDIT: 'false'
+      NPM_CONFIG_FUND: 'false'
+      NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: 9.15.4
+          run_install: false
+      - name: Install and prepare workspace
+        uses: ./.github/actions/setup-ci-dependencies
+        with:
+          restore-cache: 'false'
+      - name: Upstream policy checks
+        if: matrix.lane == 'policy'
+        run: |
+          pnpm check:node-version
+          pnpm check:no-git-push
+          pnpm check:module-boundaries
+          pnpm check:token-gates
+          # The pinned upstream has no ESLint configuration or Hermes ESLint dependency.
+          # Run its supported policy gates instead of an unsupported recursive lint command.
+      - name: Typecheck
+        if: matrix.lane == 'typecheck'
+        run: pnpm typecheck
+      - name: Build
+        if: matrix.lane == 'build'
+        run: pnpm build
+      - name: Prebuild native runner and fixture binaries
+        if: matrix.lane == 'general-server-native-runner'
+        working-directory: packages/paperclip-runner/runner
+        run: |
+          cargo build --locked -p paperclip-runner-core --bins
+          cargo build --release --locked -p paperclip-runner-core --bin paperclip-runnerd
+          test -x target/debug/paperclip-runnerd
+          test -x target/debug/fake-codex-app-server
+          test -x target/release/paperclip-runnerd
+      - name: General Vitest suites
+        if: matrix.group != ''
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+          SHARD_INDEX: ${{ matrix.shard_index }}
+          SHARD_COUNT: ${{ matrix.shard_count }}
+          PAPERCLIP_FORK_CI_NATIVE_RUNNER_MODE: split
+        run: |
+          if [ -n "$SHARD_COUNT" ]; then
+            pnpm test:run:general -- --group "$TEST_GROUP" --shard-index "$SHARD_INDEX" --shard-count "$SHARD_COUNT"
+          else
+            pnpm test:run:general -- --group "$TEST_GROUP"
+          fi
+      - name: Serialized Vitest suites
+        if: matrix.lane == 'serialized-tests'
+        run: pnpm test:run:serialized
+
+  # Diagnostic lane only: the full matrix remains the default and is required
+  # for review/merge. Removing this label or marking the PR ready runs full CI.
+  fork-ci-native-diagnostic:
+    name: Fork diagnostic / Dot Runner only
+    if: github.base_ref == 'dev' && github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'fork-ci-native-runner-only') && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'labeled' && github.event.label.name == 'fork-ci-native-runner-only'))
+    concurrency:
+      group: fork-ci-native-diagnostic-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CI: 'true'
+      NPM_CONFIG_AUDIT: 'false'
+      NPM_CONFIG_FUND: 'false'
+      NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: 9.15.4
+          run_install: false
+      - name: Install and prepare workspace
+        uses: ./.github/actions/setup-ci-dependencies
+        with:
+          restore-cache: 'false'
+      - name: Prebuild native runner and fixture binaries
+        working-directory: packages/paperclip-runner/runner
+        run: |
+          cargo build --locked -p paperclip-runner-core --bins
+          cargo build --release --locked -p paperclip-runner-core --bin paperclip-runnerd
+          test -x target/debug/paperclip-runnerd
+          test -x target/debug/fake-codex-app-server
+          test -x target/release/paperclip-runnerd
+      - name: Dot Runner Vitest suite (isolated)
+        env:
+          PAPERCLIP_FORK_CI_NATIVE_RUNNER_MODE: dot-only
+        run: pnpm test:run:general -- --group general-server-native-runner
