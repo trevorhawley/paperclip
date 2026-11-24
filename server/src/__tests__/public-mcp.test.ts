@@ -26,6 +26,7 @@ import { documentService } from "../services/documents.js";
 import { createStorageService } from "../storage/service.js";
 import { createLocalDiskStorageProvider } from "../storage/local-disk-provider.js";
 import * as assignmentWakeups from "../services/issue-assignment-wakeup.js";
+import * as serviceIndex from "../services/index.js";
 import { assertCompanyAccess } from "../routes/authz.js";
 import { actorMiddleware } from "../middleware/auth.js";
 import { boardMutationGuard } from "../middleware/board-mutation-guard.js";
@@ -698,6 +699,53 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
     await db.update(issues).set({ assigneeAgentId: agent!.id }).where(eq(issues.id, taskId));
     expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).toMatchObject({ outcome: "rejected", status: 409 });
     expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status: "todo" })).toMatchObject({ outcome: "rejected", status: 409 });
+  });
+
+  it("hands passive work to native scheduling only on an explicit handoff", async () => {
+    const f = await fixture();
+    const [project] = await db.insert(projects).values({ companyId: f.company.id, name: "Handoff project" }).returning();
+    const [agent] = await db.insert(agents).values({ companyId: f.company.id, name: "Handoff agent", role: "researcher", adapterType: "process", status: "idle" }).returning();
+    // Exercise the real authenticated task routes, but intercept the final
+    // scheduling boundary so this acceptance test cannot start a model/process.
+    const heartbeat = serviceIndex.heartbeatService(db);
+    const wake = vi.spyOn(heartbeat, "wakeup").mockResolvedValue(null);
+    const factory = vi.spyOn(serviceIndex, "heartbeatService").mockReturnValue(heartbeat);
+    try {
+      const api = express.Router(); api.use(boardMutationGuard());
+      api.use(issueRoutes(db, createStorageService(createLocalDiskStorageProvider("/tmp/paperclip-public-mcp-unused-storage"))));
+      api.use(activityRoutes(db));
+      const execute = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
+      const created = await execute(f.tokens.access_token, "paperclip_create_passive_task", {
+        companyId: f.company.id, requestId: randomUUID(), title: "External work for handoff", description: "Synthetic acceptance", projectId: project!.id,
+      });
+      const [task] = await db.select().from(issues).where(eq(issues.companyId, f.company.id));
+      expect(created).toHaveProperty("task.id", task!.id);
+      expect(created).toHaveProperty("task.assigneeAgentId", null);
+      const args = { companyId: f.company.id, taskId: task!.id, requestId: randomUUID(), assigneeAgentId: agent!.id };
+      await execute(f.tokens.access_token, "paperclip_add_passive_comment", { companyId: f.company.id, taskId: task!.id, requestId: randomUUID(), body: "Ready for deliberate handoff." });
+      expect(wake).not.toHaveBeenCalled();
+      const other = await fixture();
+      await expect(execute(other.tokens.access_token, "paperclip_handoff_task", args)).rejects.toThrow();
+      expect(wake).not.toHaveBeenCalled();
+      const delegated = await execute(f.tokens.access_token, "paperclip_handoff_task", args);
+      expect(delegated).toHaveProperty("task.assigneeAgentId", agent!.id);
+      expect(delegated).toHaveProperty("task.status", "todo");
+      await vi.waitFor(() => expect(wake).toHaveBeenCalledTimes(1));
+      expect(wake).toHaveBeenCalledWith(agent!.id, expect.objectContaining({
+        source: "assignment", reason: "issue_assigned",
+        requestedByActorType: "user", requestedByActorId: f.actor.userId,
+        payload: expect.objectContaining({ issueId: task!.id }),
+      }));
+      expect(await execute(f.tokens.access_token, "paperclip_handoff_task", args)).toEqual(delegated);
+      expect(wake).toHaveBeenCalledTimes(1);
+      expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", {
+        companyId: f.company.id, taskId: task!.id, requestId: randomUUID(), body: "Must not bypass assigned-task safeguards.",
+      })).toMatchObject({ outcome: "rejected", status: 409 });
+      expect(wake).toHaveBeenCalledTimes(1);
+    } finally {
+      factory.mockRestore();
+      wake.mockRestore();
+    }
   });
 
   it("requires fresh explicit configuration consent and never upscopes old grants", async () => {
