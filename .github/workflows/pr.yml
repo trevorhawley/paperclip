@@ -20,6 +20,9 @@ jobs:
 
   fork-ci:
     name: Fork / ${{ matrix.lane }}
+    concurrency:
+      group: fork-ci-${{ github.event.pull_request.number }}-${{ matrix.lane }}
+      cancel-in-progress: true
     if: github.base_ref == 'dev' && github.event.action != 'labeled'
     runs-on: ubuntu-latest
     timeout-minutes: 60
