@@ -13,7 +13,62 @@ permissions:
 
 jobs:
   ci:
-    if: github.event.action != 'labeled' || github.event.label.name == 'profile-ci' || github.event.label.name == 'full-ci'
+    if: github.base_ref != 'dev' && (github.event.action != 'labeled' || github.event.label.name == 'profile-ci' || github.event.label.name == 'full-ci')
     # Master requires CODEOWNERS review for .github/**, including this workflow.
     # The AWS runner group permits pr-trusted.yml@refs/heads/master.
     uses: paperclipai/paperclip/.github/workflows/pr-trusted.yml@master
+
+  fork-ci:
+    name: Fork / ${{ matrix.lane }}
+    if: github.base_ref == 'dev' && github.event.action != 'labeled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [policy, typecheck, build, general-tests, serialized-tests]
+    env:
+      CI: 'true'
+      NPM_CONFIG_AUDIT: 'false'
+      NPM_CONFIG_FUND: 'false'
+      NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: 9.15.4
+          run_install: false
+      - name: Install and prepare workspace
+        uses: ./.github/actions/setup-ci-dependencies
+        with:
+          restore-cache: 'false'
+      - name: Upstream policy checks
+        if: matrix.lane == 'policy'
+        run: |
+          pnpm check:node-version
+          pnpm check:no-git-push
+          pnpm check:module-boundaries
+          pnpm check:token-gates
+          pnpm -r --if-present lint
+      - name: Typecheck
+        if: matrix.lane == 'typecheck'
+        run: pnpm typecheck
+      - name: Build
+        if: matrix.lane == 'build'
+        run: pnpm build
+      - name: General Vitest suites
+        if: matrix.lane == 'general-tests'
+        run: pnpm test:run:general
+      - name: Serialized Vitest suites
+        if: matrix.lane == 'serialized-tests'
+        run: pnpm test:run:serialized
