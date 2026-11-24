@@ -8,7 +8,7 @@ import { projectRoutes } from "../routes/projects.js";
 import { agentRoutes } from "../routes/agents.js";
 import { companySkillRoutes } from "../routes/company-skills.js";
 import { MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
-import { mcpAttachmentUploads, mcpFileTickets, principalPermissionGrants, heartbeatRuns, issueAccessGrants } from "@paperclipai/db";
+import { mcpAttachmentUploads, mcpFileTickets, principalPermissionGrants, heartbeatRuns, issueAccessGrants, agentWakeupRequests, fastResponseRequests, projects } from "@paperclipai/db";
 import { createHmac, createHash, randomBytes, randomUUID } from "node:crypto";
 import express, { type Request } from "express";
 import request from "supertest";
@@ -623,6 +623,41 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
       expect(paused.scheduling).toContain("does not guarantee execution has started");
       expect((await db.select().from(agents).where(eq(agents.id, agent!.id)))[0]?.status).toBe("paused");
     } finally { wake.mockRestore(); }
+  });
+
+  it("records passive collaboration without runs or wakeups, including an agent mention", async () => {
+    const f = await fixture();
+    const [project] = await db.insert(projects).values({ companyId: f.company.id, name: "Synthetic project" }).returning();
+    const [agent] = await db.insert(agents).values({ companyId: f.company.id, name: "Synthetic agent", role: "researcher", adapterType: "process", status: "idle" }).returning();
+    const api = express.Router(); api.use(boardMutationGuard());
+    api.use(issueRoutes(db, createStorageService(createLocalDiskStorageProvider("/tmp/paperclip-public-mcp-unused-storage"))));
+    const execute = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
+    const create = { companyId: f.company.id, requestId: randomUUID(), title: "External research", description: "Synthetic task", projectId: project!.id };
+    const result = await execute(f.tokens.access_token, "paperclip_create_passive_task", create);
+    expect(result).toHaveProperty("task.assigneeAgentId", null);
+    expect(result).toHaveProperty("task.status", "backlog");
+    expect(await execute(f.tokens.access_token, "paperclip_create_passive_task", create)).toEqual(result);
+    const taskId = (result.task as { id: string }).id;
+    const args = { companyId: f.company.id, taskId, requestId: randomUUID(), body: `Progress: @[Synthetic agent](agent://${agent!.id})`, platform: "Example AI", model: "example-model", chatUrl: "https://example.com/thread" };
+    const feedback = await execute(f.tokens.access_token, "paperclip_add_passive_comment", args);
+    expect(feedback).toHaveProperty("comment.authorUserId", f.actor.userId);
+    expect(feedback).toHaveProperty("comment.authorAgentId", null);
+    expect(feedback).toHaveProperty("comment.metadata.sections.0.rows", expect.arrayContaining([
+      expect.objectContaining({ label: "Platform", value: "Example AI" }),
+      expect.objectContaining({ label: "Model", value: "example-model" }),
+      expect.objectContaining({ label: "Chat URL", value: "https://example.com/thread" }),
+    ]));
+    expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", args)).toEqual(feedback);
+    for (const status of ["todo", "done"]) {
+      expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status })).toHaveProperty("task.status", status);
+    }
+    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, taskId))).toHaveLength(1);
+    expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.companyId, f.company.id))).toHaveLength(0);
+    expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, f.company.id))).toHaveLength(0);
+    expect(await db.select().from(fastResponseRequests).where(eq(fastResponseRequests.companyId, f.company.id))).toHaveLength(0);
+    await db.update(issues).set({ assigneeAgentId: agent!.id }).where(eq(issues.id, taskId));
+    expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).toMatchObject({ outcome: "rejected", status: 409 });
+    expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status: "todo" })).toMatchObject({ outcome: "rejected", status: 409 });
   });
 
   it("requires fresh explicit configuration consent and never upscopes old grants", async () => {
