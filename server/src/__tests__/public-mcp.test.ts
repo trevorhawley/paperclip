@@ -631,6 +631,7 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
     const [agent] = await db.insert(agents).values({ companyId: f.company.id, name: "Synthetic agent", role: "researcher", adapterType: "process", status: "idle" }).returning();
     const api = express.Router(); api.use(boardMutationGuard());
     api.use(issueRoutes(db, createStorageService(createLocalDiskStorageProvider("/tmp/paperclip-public-mcp-unused-storage"))));
+    api.use(activityRoutes(db));
     const execute = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
     const create = { companyId: f.company.id, requestId: randomUUID(), title: "External research", description: "Synthetic task", projectId: project!.id };
     const result = await execute(f.tokens.access_token, "paperclip_create_passive_task", create);
@@ -652,8 +653,25 @@ describe.skipIf(!support.supported)("public MCP OAuth and tool boundary", () => 
     ]));
     expect(await execute(f.tokens.access_token, "paperclip_add_passive_comment", args)).toEqual(feedback);
     for (const status of ["todo", "done"]) {
-      expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", { companyId: f.company.id, taskId, requestId: randomUUID(), status })).toHaveProperty("task.status", status);
+      const statusArgs = { companyId: f.company.id, taskId, requestId: randomUUID(), status };
+      const updated = await execute(f.tokens.access_token, "paperclip_set_passive_task_status", statusArgs);
+      expect(updated).toHaveProperty("task.status", status);
+      expect(await execute(f.tokens.access_token, "paperclip_set_passive_task_status", statusArgs)).toEqual(updated);
     }
+    // A later assistant conversation must be able to recover both the work and its provenance.
+    const later = createPublicMcpExecutor(db, oauth, createMcpApiDispatch(api));
+    const read = await later(f.tokens.access_token, "paperclip_read_task", { companyId: f.company.id, taskId });
+    expect(read).toHaveProperty("task.status", "done");
+    expect(read).toHaveProperty("comments.0.authorUserId", f.actor.userId);
+    expect(read).toHaveProperty("comments.0.body", args.body);
+    expect(read).toHaveProperty("comments.0.metadata.sections.0.rows", expect.arrayContaining([
+      expect.objectContaining({ label: "Platform", value: args.platform }),
+      expect.objectContaining({ label: "Model", value: args.model }),
+      expect.objectContaining({ label: "Chat URL", value: args.chatUrl }),
+    ]));
+    const other = await fixture();
+    await expect(later(other.tokens.access_token, "paperclip_read_task", { companyId: f.company.id, taskId })).rejects.toThrow();
+    await expect(later(other.tokens.access_token, "paperclip_add_passive_comment", { ...args, requestId: randomUUID() })).rejects.toThrow();
     expect(await db.select().from(issueComments).where(eq(issueComments.issueId, taskId))).toHaveLength(1);
     expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.companyId, f.company.id))).toHaveLength(0);
     expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, f.company.id))).toHaveLength(0);

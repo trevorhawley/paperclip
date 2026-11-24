@@ -60,6 +60,20 @@ export function createMcpApiDispatch(api: Router, parentLocals?: Record<string, 
   };
 }
 
+/** Expose only self-reported external provenance, not arbitrary internal comment metadata. */
+function publicTaskComment(value: unknown) {
+  const comment = pick(value, commentFields);
+  const metadata = object(object(value).metadata);
+  const section = rows(metadata.sections).map(object).find(s => s.title === "External AI provenance (self-reported)");
+  if (!section) return comment;
+  const provenance = rows(section.rows).map(object).filter(row =>
+    row.type === "key_value" &&
+    ["Platform", "Model", "Chat URL"].includes(String(row.label)) &&
+    typeof row.value === "string"
+  ).map(row => ({ type: "key_value", label: row.label, value: row.value }));
+  return { ...comment, metadata: { version: 1, sections: [{ title: section.title, rows: provenance }] } };
+}
+
 export const publicMcpCapabilities: Capability[] = [
   {
     name: "paperclip_connection", description: "Identify the connected person, explicitly authorized company and permissions. This connection acts as the person; assigning a task never impersonates its agent.",
@@ -100,7 +114,7 @@ export const publicMcpCapabilities: Capability[] = [
       const comments = await api(p, "GET", base + "/comments?limit=30");
       const activity = await api(p, "GET", base + "/activity?limit=30");
       return { task: pick(issue, taskFields), url: origin + "/" + pathId(p.company.issuePrefix) + "/issues/" + pathId(object(issue).identifier ?? a.taskId),
-        comments: rows(comments).map((v) => pick(v, commentFields)),
+        comments: rows(comments).map(publicTaskComment),
         history: rows(activity).slice(0, 30).map((v) => pick(v, ["id", "action", "actorType", "actorId", "createdAt"])) };
     },
   },
