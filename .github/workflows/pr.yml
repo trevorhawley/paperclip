@@ -141,6 +141,7 @@ jobs:
           TEST_GROUP: ${{ matrix.group }}
           SHARD_INDEX: ${{ matrix.shard_index }}
           SHARD_COUNT: ${{ matrix.shard_count }}
+          PAPERCLIP_FORK_CI_NATIVE_RUNNER_MODE: split
         run: |
           if [ -n "$SHARD_COUNT" ]; then
             pnpm test:run:general -- --group "$TEST_GROUP" --shard-index "$SHARD_INDEX" --shard-count "$SHARD_COUNT"
@@ -154,7 +155,7 @@ jobs:
   # Diagnostic lane only: the full matrix remains the default and is required
   # for review/merge. Removing this label or marking the PR ready runs full CI.
   fork-ci-native-diagnostic:
-    name: Fork diagnostic / native runner only
+    name: Fork diagnostic / Dot Runner only
     if: github.base_ref == 'dev' && github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'fork-ci-native-runner-only') && (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'labeled' && github.event.label.name == 'fork-ci-native-runner-only'))
     concurrency:
       group: fork-ci-native-diagnostic-${{ github.event.pull_request.number }}
@@ -194,5 +195,7 @@ jobs:
           test -x target/debug/paperclip-runnerd
           test -x target/debug/fake-codex-app-server
           test -x target/release/paperclip-runnerd
-      - name: Native runner Vitest suites
+      - name: Dot Runner Vitest suite (isolated)
+        env:
+          PAPERCLIP_FORK_CI_NATIVE_RUNNER_MODE: dot-only
         run: pnpm test:run:general -- --group general-server-native-runner
