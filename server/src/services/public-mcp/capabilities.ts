@@ -134,7 +134,7 @@ export const publicMcpCapabilities: Capability[] = [
     schema: z.object({ ...task, requestId, body: z.string().trim().min(1).max(50000),
       platform: z.string().trim().min(1).max(100).optional(),
       model: z.string().trim().min(1).max(200).optional(),
-      chatUrl: z.string().url().max(1000).refine(v => /^https?:\\/\\//i.test(v), "Use an HTTP(S) chat URL").optional(),
+      chatUrl: z.string().url().max(1000).refine(v => v.startsWith("https://") || v.startsWith("http://"), "Use an HTTP(S) chat URL").optional(),
     }).strict(),
     run: async (p, a, api) => {
       const provenance = [["Platform", a.platform], ["Model", a.model], ["Chat URL", a.chatUrl]]
