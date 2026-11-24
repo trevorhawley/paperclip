@@ -14339,7 +14339,7 @@ export function issueRoutes(
     await assertMcpTaskParticipation(query, issue);
     const reject = () => { throw conflict("Passive collaboration requires an unassigned standalone task without active automation or review", { code: "MCP_PASSIVE_TASK_REQUIRED" }); };
     if (issue.assigneeAgentId || issue.parentId || issue.conversationAgentId ||
-      issue.externalConversationState || issue.executionPolicy || issue.executionState ||
+      issue.executionPolicy || issue.executionState ||
       issue.harnessKind || issue.checkoutRunId || issue.executionRunId || issue.status === "blocked") reject();
     const [relation] = await query.select({ id: issueRelations.id }).from(issueRelations).where(and(
       eq(issueRelations.companyId, issue.companyId),
@@ -14366,7 +14366,10 @@ export function issueRoutes(
       eq(fastResponseRequests.companyId, issue.companyId), eq(fastResponseRequests.issueId, issue.id),
       inArray(fastResponseRequests.status, ["pending", "running"]),
     )).limit(1);
-    if (relation || child || pending || watchdog || wake || fast) reject();
+    const [conversation] = await query.select({ id: chatConversations.id }).from(chatConversations).where(
+      eq(chatConversations.issueId, issue.id),
+    ).limit(1);
+    if (relation || child || pending || watchdog || wake || fast || conversation) reject();
   }
 
   /**
