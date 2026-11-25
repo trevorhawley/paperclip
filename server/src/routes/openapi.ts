@@ -4260,6 +4260,16 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/companies/{companyId}/external-conversation-updates",
+  tags: ["issues"],
+  summary: "List recent external AI conversation updates",
+  description: "Authenticated board-only read of up to 100 recent passive comments in this company. Each task is checked against the existing issue read policy. Platform, model, and chat URL are self-reported by the external assistant.",
+  request: { params: z.object({ companyId: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/companies/{companyId}/chats",
   tags: ["issues"],
   summary: "List the current board user's agent conversations",
