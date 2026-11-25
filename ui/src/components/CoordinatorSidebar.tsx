@@ -162,7 +162,6 @@ export function CoordinatorSidebar({ children }: { children?: ReactNode }) {
         {rail ? <Tooltip><TooltipTrigger asChild>{newTaskButton}</TooltipTrigger><TooltipContent side="right">New task</TooltipContent></Tooltip> : newTaskButton}
         <div className="design-sidebar-primary my-2">
           <SidebarNavItem className="design-sidebar-item" to="/chats" label="Chat" icon={MessageCircle} badge={unreadChatCount} badgeLabel="unread chats" />
-          <SidebarNavItem className="design-sidebar-item" to="/conversations" label="Conversations" icon={History} />
           <div className="group/coordinator-new relative">
             <SidebarNavItem to="/issues" label="Tasks" icon={CircleCheck} className={cn("design-sidebar-item", !rail && "pr-9")} />
             {!rail && <button type="button" aria-label="New task" title="New task" onClick={() => openNewIssue()}

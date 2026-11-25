@@ -33,7 +33,9 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useLocation, useNavigate, useSearchParams } from "@/lib/router";
 import { loadTaskListView, saveTaskListView, taskListViews, taskListViewStorageKey, type TaskListView } from "@/lib/task-list-views";
 import { normalizeTaskViewKey, ORGANIZATION_SCOPED_PARAMS, taskView } from "@/lib/task-views";
-import type { Issue } from "@paperclipai/shared";
+import type { ExternalConversationUpdate, Issue } from "@paperclipai/shared";
+import { api } from "@/api/client";
+import { NativeSelect } from "@/components/ui/select";
 
 const pageSize = 200;
 
@@ -188,14 +190,36 @@ export function CoordinatorTasks({ viewControl }: { viewControl?: ReactNode } = 
   const recordsWithContext = [...records, ...(view === "unread" ? parentContext.data ?? [] : [])];
   const scopedRecords = needsAttention && workspaceIds.length ? records.filter(issue =>
     workspaceIds.includes(issue.executionWorkspaceId ?? "") || workspaceIds.includes(issue.projectWorkspaceId ?? "")) : recordsWithContext;
-  const items: TaskListItem[] = [...new Map(scopedRecords.map(issue => [issue.id, issue])).values()].map(issue => ({
+  // Conversations from ChatGPT, Claude, Codex and other AIs are recorded on
+  // tasks; surface their origin and latest note on the task row itself.
+  const sourceFilter = params.get("source") ?? "";
+  const aiUpdates = useQuery({
+    queryKey: ["external-conversation-updates", companyId],
+    queryFn: () => api.get<ExternalConversationUpdate[]>(`/companies/${companyId}/external-conversation-updates`),
+    enabled: !!companyId,
+  });
+  const sourceByTask = new Map<string, { platform: string; note?: string }>();
+  for (const update of aiUpdates.data ?? []) {
+    if (sourceByTask.has(update.task.id)) continue;
+    const note = update.discussion.replace(/\s+/g, " ").trim();
+    sourceByTask.set(update.task.id, { platform: update.platform?.trim() || "AI chat", note: note ? note.slice(0, 160) : undefined });
+  }
+  const sourceOptions = [...new Set([...sourceByTask.values()].map(source => source.platform))].sort();
+  const setSourceFilter = (value: string) => setParams(current => {
+    const next = new URLSearchParams(current);
+    if (value) next.set("source", value); else next.delete("source");
+    return next;
+  }, { replace: true });
+  const allItems: TaskListItem[] = [...new Map(scopedRecords.map(issue => [issue.id, issue])).values()].map(issue => ({
     issue: { ...issue, project: issue.project ?? projectById.get(issue.projectId ?? "") },
     unread: unreadIds.has(issue.id) || issue.isUnreadForMe === true,
     createdBy: issue.createdByAgentId ? agentById.get(issue.createdByAgentId)?.name ?? "Unknown agent" : users.get(issue.createdByUserId ?? "")?.label ?? "Board",
     assignee: issue.assigneeAgentId ? agentById.get(issue.assigneeAgentId)?.name ?? "Unknown agent" : users.get(issue.assigneeUserId ?? "")?.label ?? formatUserLabel(issue.assigneeUserId),
     assigneeAgent: agentById.get(issue.assigneeAgentId ?? ""),
     assigneeUserAvatarUrl: users.get(issue.assigneeUserId ?? "")?.image,
+    source: sourceByTask.get(issue.id) ?? null,
   }));
+  const items = sourceFilter ? allItems.filter(item => item.source && (sourceFilter === "any" || item.source.platform === sourceFilter)) : allItems;
   const collection = useTaskListCollection({ items, companyId, userId, query, onQueryChange: setQuery, view: needsAttention ? "all" : view,
     layout, onLayoutChange: setLayout,
     searchMode: "server",
@@ -280,7 +304,10 @@ export function CoordinatorTasks({ viewControl }: { viewControl?: ReactNode } = 
 
   if (!companyId) return <EmptyState icon={ListChecks} message="Select an organization to view tasks." />;
   return <FlyoutAppearanceProvider><TruncatedTextMarqueeProvider><section ref={listRef} className="coordinator-task-list task-row-design-preview flex min-w-0 flex-col gap-8" aria-label="Tasks">
-    <TaskListToolbar view={view} onViewChange={setView} viewControl={viewControl}
+    <TaskListToolbar view={view} onViewChange={setView} viewControl={<>{viewControl}{sourceOptions.length > 0 || sourceFilter ? <NativeSelect aria-label="Filter tasks by source" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)} className="w-auto">
+        <option value="">All sources</option><option value="any">Any AI chat</option>{sourceOptions.map(option => <option key={option} value={option}>{option}</option>)}
+        {sourceFilter && sourceFilter !== "any" && !sourceOptions.includes(sourceFilter) ? <option value={sourceFilter}>{sourceFilter}</option> : null}
+      </NativeSelect> : null}</>}
       query={collection.query} onQueryChange={collection.setQuery} layout={collection.layout} onLayoutChange={collection.setLayout}
       allExpanded={collection.allExpanded} onToggleExpanded={collection.toggleExpanded} onNewTask={() => openNewIssue()}
       filters={{ enableRoutineTasksFilter: true, state: collection.filters, onChange: updateFilters, activeFilterCount: collection.activeFilterCount,

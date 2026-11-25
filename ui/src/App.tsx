@@ -1,5 +1,4 @@
 import { useCoordinatorWorkspaceEnabled } from "./hooks/useCoordinatorWorkspaceEnabled";
-import { Conversations } from "./pages/Conversations";
 import { AgentChats } from "./pages/AgentChats";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import type { ToolConnectionCredentialSource } from "@paperclipai/shared";
@@ -330,7 +329,7 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
           <Route path="issues/recent" element={<Navigate to="/issues" replace />} />
         </>
       )}
-      <Route path="conversations" element={<Conversations />} />
+      <Route path="conversations" element={<Navigate to="../issues?view=all&source=any" replace />} />
       <Route path="chats" element={<AgentChats />} />
       <Route path="chats/:agentRef" element={<AgentChat />} />
       <Route path="issues/:issueId" element={<IssueDetail />} />
