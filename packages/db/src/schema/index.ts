@@ -97,6 +97,7 @@ export {
   pipelineAutomationExecutions,
 } from "./pipeline_cases.js";
 export { pipelineCaseEvents } from "./pipeline_case_events.js";
+export { conversationTaskLinks } from "./conversation_task_links.js";
 export { issueWorkProducts } from "./issue_work_products.js";
 export { labels } from "./labels.js";
 export { issueLabels } from "./issue_labels.js";

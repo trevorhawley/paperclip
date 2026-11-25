@@ -4,6 +4,7 @@ import type { ExternalConversationUpdate } from "@paperclipai/shared";
 import { api } from "@/api/client";
 import { projectsApi } from "@/api/projects";
 import { MarkdownBody } from "@/components/MarkdownBody";
+import { ConversationTaskLinks } from "@/components/ConversationTaskLinks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -249,6 +250,10 @@ function ConversationHistory({ companyId }: { companyId: string }) {
               </Button>}
             </div>
             <MarkdownBody className="break-words">{selected.summary}</MarkdownBody>
+            {(selected.source === "native" || selected.source === "memory") && nativeChats.userId && (
+              <ConversationTaskLinks key={selected.id} companyId={companyId} userId={nativeChats.userId}
+                source={selected.source} conversationId={selected.id} />
+            )}
             {selected.source === "memory" && <>
               <ConversationNotes title="Decisions" items={selected.decisions} />
               <ConversationNotes title="Action items" items={selected.actionItems} />

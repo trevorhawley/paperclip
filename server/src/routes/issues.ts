@@ -83,6 +83,7 @@ import {
   chatEndpoints,
   chatPublications,
   companyMemberships,
+  conversationTaskLinks,
   documents,
   executionWorkspaces,
   heartbeatRuns,
@@ -19258,6 +19259,136 @@ export function issueRoutes(
       return;
     }
     res.json(bundle);
+  });
+
+  const conversationLinkSchema = z.object({
+    source: z.enum(["memory", "native"]),
+    conversationId: z.string().uuid(),
+  }).strict();
+
+  async function authorizeConversationLink(req: Request, companyId: string, source: "memory" | "native", conversationId: string) {
+    assertCompanyAccess(req, companyId);
+    if (req.actor.type !== "board" || req.actor.source !== "session" || !req.actor.userId) {
+      throw forbidden("Authenticated board session required");
+    }
+    const userId = req.actor.userId;
+    if (source === "memory") {
+      if (process.env.PAPERCLIP_MEMORY_COMPANY_ID !== companyId || process.env.PAPERCLIP_MEMORY_OWNER_ID !== userId) {
+        throw notFound("Conversation not found");
+      }
+      const [membership] = await db.select({ id: companyMemberships.id }).from(companyMemberships).where(and(
+        eq(companyMemberships.companyId, companyId), eq(companyMemberships.principalType, "user"),
+        eq(companyMemberships.principalId, userId), eq(companyMemberships.status, "active"),
+        eq(companyMemberships.membershipRole, "owner"),
+      )).limit(1);
+      if (!membership) throw notFound("Conversation not found");
+    } else {
+      const conversation = await svc.getById(conversationId);
+      if (!conversation || conversation.companyId !== companyId || !conversation.conversationAgentId ||
+        conversation.conversationUserId !== userId || !(await decideIssueAccess(req, conversation, "issue:read")).allowed) {
+        throw notFound("Conversation not found");
+      }
+    }
+    return userId;
+  }
+
+  router.get("/companies/:companyId/conversation-task-links", async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    const parsed = conversationLinkSchema.safeParse(req.query);
+    if (!parsed.success) throw badRequest("Invalid conversation reference");
+    const companyId = req.params.companyId as string;
+    const { source, conversationId } = parsed.data;
+    const userId = await authorizeConversationLink(req, companyId, source, conversationId);
+    const rows = await db.select({ link: conversationTaskLinks, issue: issueRows })
+      .from(conversationTaskLinks)
+      .innerJoin(issueRows, and(eq(issueRows.id, conversationTaskLinks.issueId), eq(issueRows.companyId, companyId)))
+      .where(and(eq(conversationTaskLinks.companyId, companyId), eq(conversationTaskLinks.ownerUserId, userId),
+        eq(conversationTaskLinks.conversationSource, source), eq(conversationTaskLinks.conversationId, conversationId)));
+    const allowed = new Set((await filterIssuesForActor(req, rows.map(row => row.issue))).map(issue => issue.id));
+    res.json(rows.filter(row => allowed.has(row.issue.id)).map(({ link, issue }) => ({
+      id: link.id, issueId: issue.id, identifier: issue.identifier, title: issue.title,
+    })));
+  });
+
+  router.get("/issues/:id/conversation-task-links", async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    const issue = await getAccessibleResource(req, res, getIssueById(req, req.params.id as string), "Issue not found");
+    if (!issue || !(await assertIssueReadAllowed(req, res, issue))) return;
+    if (req.actor.type !== "board" || req.actor.source !== "session" || !req.actor.userId) {
+      throw forbidden("Authenticated board session required");
+    }
+    const rows = await db.select().from(conversationTaskLinks).where(and(
+      eq(conversationTaskLinks.companyId, issue.companyId), eq(conversationTaskLinks.issueId, issue.id),
+      eq(conversationTaskLinks.ownerUserId, req.actor.userId),
+    ));
+    const nativeIds = [...new Set(rows.filter(link => link.conversationSource === "native").map(link => link.conversationId))];
+    const conversations = nativeIds.length ? await db.select().from(issueRows).where(and(
+      eq(issueRows.companyId, issue.companyId), inArray(issueRows.id, nativeIds),
+      eq(issueRows.conversationUserId, req.actor.userId),
+    )) : [];
+    const visible = new Set((await filterIssuesForActor(req, conversations))
+      .filter(conversation => conversation.conversationAgentId).map(conversation => conversation.id));
+    let memoryAllowed = false;
+    const memoryLink = rows.find(link => link.conversationSource === "memory");
+    if (memoryLink) {
+      try {
+        await authorizeConversationLink(req, issue.companyId, "memory", memoryLink.conversationId);
+        memoryAllowed = true;
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status !== 404) throw error;
+      }
+    }
+    res.json(rows.filter(link =>
+      link.conversationSource === "memory" ? memoryAllowed :
+        link.conversationSource === "native" && visible.has(link.conversationId),
+    ).map(link => ({ id: link.id, source: link.conversationSource, conversationId: link.conversationId })));
+  });
+
+  router.post("/issues/:id/conversation-task-links", async (req, res) => {
+    const parsed = conversationLinkSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid conversation reference");
+    const issue = await getAccessibleResource(req, res, svc.getById(req.params.id as string), "Issue not found");
+    if (!issue || !(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    const { source, conversationId } = parsed.data;
+    const userId = await authorizeConversationLink(req, issue.companyId, source, conversationId);
+    const publications: ActivityPublication[] = [];
+    const result = await db.transaction(async tx => {
+      const [created] = await tx.insert(conversationTaskLinks).values({
+        companyId: issue.companyId, ownerUserId: userId, conversationSource: source, conversationId, issueId: issue.id,
+      }).onConflictDoNothing().returning();
+      if (created) await logActivity(tx as unknown as Db, {
+        companyId: issue.companyId, actorType: "user", actorId: userId, action: "issue.conversation_linked",
+        entityType: "issue", entityId: issue.id,
+      }, publications);
+      return created;
+    });
+    for (const publication of publications) publishActivity(publication);
+    res.status(result ? 201 : 200).json({ linked: true });
+  });
+
+  router.delete("/issues/:id/conversation-task-links/:linkId", async (req, res) => {
+    const issue = await getAccessibleResource(req, res, svc.getById(req.params.id as string), "Issue not found");
+    if (!issue || !(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (req.actor.type !== "board" || req.actor.source !== "session" || !req.actor.userId) throw forbidden("Authenticated board session required");
+    const userId = req.actor.userId;
+    const linkId = z.string().uuid().safeParse(req.params.linkId);
+    if (!linkId.success) throw badRequest("Invalid link ID");
+    const [link] = await db.select().from(conversationTaskLinks).where(and(
+      eq(conversationTaskLinks.id, linkId.data), eq(conversationTaskLinks.issueId, issue.id),
+      eq(conversationTaskLinks.companyId, issue.companyId), eq(conversationTaskLinks.ownerUserId, userId),
+    )).limit(1);
+    if (!link || (link.conversationSource !== "memory" && link.conversationSource !== "native")) throw notFound("Link not found");
+    await authorizeConversationLink(req, issue.companyId, link.conversationSource, link.conversationId);
+    const publications: ActivityPublication[] = [];
+    await db.transaction(async tx => {
+      const deleted = await tx.delete(conversationTaskLinks).where(eq(conversationTaskLinks.id, link.id)).returning();
+      if (deleted.length) await logActivity(tx as unknown as Db, {
+        companyId: issue.companyId, actorType: "user", actorId: userId, action: "issue.conversation_unlinked",
+        entityType: "issue", entityId: issue.id,
+      }, publications);
+    });
+    for (const publication of publications) publishActivity(publication);
+    res.status(204).end();
   });
 
   router.get("/companies/:companyId/external-conversation-updates", async (req, res) => {

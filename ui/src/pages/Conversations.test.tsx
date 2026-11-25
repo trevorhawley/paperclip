@@ -157,4 +157,31 @@ describe("Conversations", () => {
     }] as never);
   });
 
+  it("keeps Paperclip records usable when the external Memory provider fails", async () => {
+    nativeFixture.userId = "owner";
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (String(path).includes("/trevor-memory")) throw new Error("Synthetic provider unavailable");
+      return [{
+        id: "paperclip-update", task: { id: "task", identifier: "PAP-1", title: "Recorded update", projectId: null },
+        recordedAt: "2026-11-25T00:00:00Z", discussion: "Recorded discussion", platform: "Codex",
+      }] as never;
+    });
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    root = createRoot(container);
+    await act(async () => root!.render(
+      <QueryClientProvider client={client!}>
+        <MemoryRouter initialEntries={["/conversations"]}>
+          <Conversations />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ));
+    await waitForText("AI Memory could not be loaded.");
+    expect(container.textContent).toContain("Recorded update");
+    expect(container.textContent).toContain("Recorded discussion");
+    vi.mocked(api.get).mockReset().mockResolvedValue([{
+      id: "paperclip-update", task: { id: "task", identifier: "PAP-1", title: "Recorded update", projectId: null },
+      recordedAt: "2026-11-25T00:00:00Z", discussion: "Recorded discussion", platform: "Codex", model: null, chatUrl: null,
+    }] as never);
+  });
+
 });

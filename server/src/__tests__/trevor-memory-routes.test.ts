@@ -15,6 +15,7 @@ const db = {
 function appFor(actor: object) {
   const app = express();
   app.use((req, _res, next) => { req.actor = actor as typeof req.actor; next(); });
+  app.get("/health", (_req, res) => res.json({ ok: true }));
   app.use("/api", trevorMemoryRoutes(db));
   app.use(errorHandler);
   return app;
@@ -70,6 +71,31 @@ describe("Trevor Memory read access", () => {
     expect(url).toBe("https://synthetic-project.supabase.co/functions/v1/paperclip-memory-read");
     expect(options?.redirect).toBe("error");
     expect(JSON.parse(String(options?.body))).toEqual({ query: "synthetic", limit: 25 });
+  });
+
+  it("does not block other Paperclip requests while the provider is slow", async () => {
+    let release!: (response: Response) => void;
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+      entered();
+      return new Promise<Response>(resolve => { release = resolve; });
+    });
+    const app = appFor(owner);
+    const pending = request(app).get(path).then(result => result);
+    await started;
+    expect((await request(app).get("/health")).body).toEqual({ ok: true });
+    release(new Response(JSON.stringify({ sessions: [] })));
+    expect((await pending).status).toBe(200);
+  });
+
+  it("returns a recoverable error when the remote request times out", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new DOMException("Timed out", "TimeoutError"));
+    const result = await request(appFor(owner)).get(path);
+    expect(result.status).toBe(502);
+    expect(result.body.error).toBe("Memory provider unavailable");
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0]?.[1]?.signal).toBeDefined();
   });
 
   it("fails safely for a provider error or invalid response", async () => {
