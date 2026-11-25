@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Inbox, Boxes, ChevronRight, CircleCheck, FolderOpen, History, LayoutDashboard, MessageCircle, MoreHorizontal, Network, Pin, PinOff, Plus, Repeat, Search, Settings, SquarePen, Unplug, type LucideIcon } from "lucide-react";
+import { Inbox, Boxes, ChevronRight, CircleCheck, FolderOpen, History, LayoutDashboard, MessageCircle, Network, Pin, PinOff, Plus, Puzzle, Repeat, Search, Settings, SquarePen, Unplug, type LucideIcon } from "lucide-react";
 import type { Agent, Project } from "@paperclipai/shared";
 import { useCoordinatorAttentionCount } from "@/hooks/useCoordinatorAttentionCount";
 import { issuesApi } from "@/api/issues";
@@ -28,14 +28,16 @@ import { AgentAvatar } from "./AgentAvatar";
 import { agentChatPinKey } from "./AgentChatPin";
 import { PinnedNavigationList, type PinnedNavigationItem } from "./PinnedNavigationList";
 
+// Pages Trevor opens constantly live at the top level; rarely used admin pages
+// share one compact "Admin" flyout (see doc/FORK-UI-DENSITY.md).
+const primaryPaths = new Set(["/dashboard", "/projects", "/routines", "/artifacts", "/agents/all", "/skills", "/cases"]);
 const moreDestinations = [
-  { label: "Search", to: "/search", icon: Search },
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Projects", to: "/projects", icon: FolderOpen },
   { label: "Routines", to: "/routines", icon: Repeat },
   { label: "Artifacts", to: "/artifacts", icon: Boxes },
   { label: "Agents", to: "/agents/all", icon: Network },
-  { label: "Skills", to: "/skills", icon: Boxes },
+  { label: "Skills", to: "/skills", icon: Puzzle },
   { label: "Connectors", to: "/apps", icon: Unplug },
   { label: "Audit", to: "/activity", icon: History },
   { label: "Settings", to: "/settings", icon: Settings },
@@ -115,7 +117,9 @@ export function CoordinatorSidebar({ children }: { children?: ReactNode }) {
     : moreDestinations, [experimental?.enableCases]);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreContentRef = useRef<HTMLDivElement>(null);
-  const orderedPins = useMemo(() => buildPinnedNavigationItems(pinnedNavigation.pins, agents.data ?? [], destinations), [pinnedNavigation.pins, agents.data, destinations]);
+  const primaryDestinations = useMemo(() => destinations.filter(item => primaryPaths.has(item.to)), [destinations]);
+  const adminDestinations = useMemo(() => destinations.filter(item => !primaryPaths.has(item.to)), [destinations]);
+  const orderedPins = useMemo(() => buildPinnedNavigationItems(pinnedNavigation.pins.filter(pin => !primaryPaths.has(pin)), agents.data ?? [], destinations), [pinnedNavigation.pins, agents.data, destinations]);
   const { entries: recentTasks } = useRecentTasks({ companyId, userId });
   const { collapsed, peeking, isMobile, setSidebarOpen } = useSidebar();
   const rail = collapsed && !peeking;
@@ -165,14 +169,15 @@ export function CoordinatorSidebar({ children }: { children?: ReactNode }) {
           </div>
           <SidebarNavItem className="design-sidebar-item" to="/decisions" label="Inbox" icon={Inbox} badge={attentionCount} badgeLabel="decisions" />
         </div>
+        {primaryDestinations.map(({ label, to, icon }) => <SidebarNavItem key={to} className="design-sidebar-item" to={to} label={label} icon={icon} />)}
         <Flyout open={moreOpen} onOpenChange={setMoreOpen}>
-          <FlyoutTrigger asChild><button type="button" aria-label="More workspace pages" className="design-sidebar-item flex w-auto items-center gap-2.5 rounded-lg py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring"><MoreHorizontal className="size-4 shrink-0" /><span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : undefined}>More</span></button></FlyoutTrigger>
-          <FlyoutContent ref={moreContentRef} tabIndex={-1} onOpenAutoFocus={(event) => { event.preventDefault(); moreContentRef.current?.focus(); }} side={isMobile ? "bottom" : "right"} align="start" className="w-56 p-1" aria-label="More workspace pages">
-            {destinations.map(({ label, to, icon: Icon }, index) => {
+          <FlyoutTrigger asChild><button type="button" aria-label="Admin pages" className="design-sidebar-item flex w-auto items-center gap-2.5 rounded-lg py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring"><Settings className="size-4 shrink-0" /><span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : undefined}>Admin</span></button></FlyoutTrigger>
+          <FlyoutContent ref={moreContentRef} tabIndex={-1} onOpenAutoFocus={(event) => { event.preventDefault(); moreContentRef.current?.focus(); }} side={isMobile ? "bottom" : "right"} align="start" className="w-56 p-1" aria-label="Admin pages">
+            {adminDestinations.map(({ label, to, icon: Icon }) => {
               const pinned = pinnedNavigation.pins.includes(to);
               const PinIcon = pinned ? PinOff : Pin;
               return <div key={to}>
-                {index === 6 || index === 10 ? <div role="separator" className="my-1 border-t border-border" /> : null}
+                
                 <div className="group/coordinator-more relative flex items-center rounded-sm transition-colors hover:bg-accent">
                   <Link to={to} onClick={() => { setMoreOpen(false); if (isMobile) setSidebarOpen(false); }} className="flex min-w-0 flex-1 items-center gap-2 rounded-sm px-2 py-1.5 pr-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <Icon className="size-4 shrink-0 text-muted-foreground" />{label}
