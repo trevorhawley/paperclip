@@ -4256,7 +4256,53 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/companies/{companyId}/trevor-memory",
+  tags: ["issues"],
+  summary: "Read authorized external conversation history",
+  description: "Optional owner-only read of Trevor AI Memory. Disabled until explicitly configured. Results are bounded to 25.",
+  request: { params: z.object({ companyId: z.string() }), query: z.object({ query: z.string().optional(), id: z.string().uuid().optional() }) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
 // ─── Issues ──────────────────────────────────────────────────────────────────
+
+registry.registerPath({
+  method: "get",
+  path: "/api/companies/{companyId}/conversation-task-links",
+  tags: ["issues"],
+  summary: "List accessible tasks linked to a conversation",
+  request: { params: z.object({ companyId: z.string() }), query: z.object({ source: z.enum(["memory", "native"]), conversationId: z.string().uuid() }) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/issues/{id}/conversation-task-links",
+  tags: ["issues"],
+  summary: "List the current user's conversations linked to a task",
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/issues/{id}/conversation-task-links",
+  tags: ["issues"],
+  summary: "Link a task to a conversation",
+  request: { params: z.object({ id: z.string() }), body: { content: { "application/json": { schema: z.object({ source: z.enum(["memory", "native"]), conversationId: z.string().uuid() }) } } } },
+  responses: { 200: r.ok(), 201: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/issues/{id}/conversation-task-links/{linkId}",
+  tags: ["issues"],
+  summary: "Remove a conversation and task link",
+  request: { params: z.object({ id: z.string(), linkId: z.string().uuid() }) },
+  responses: { 204: { description: "Link removed" }, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
 
 registry.registerPath({
   method: "get",
