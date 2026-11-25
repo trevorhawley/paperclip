@@ -541,6 +541,10 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/configuration`, { replace: true });
       return;
     }
+    if (activeTab === "context") {
+      navigate(`/projects/${canonicalProjectRef}/context`, { replace: true });
+      return;
+    }
     if (activeTab === "budget") {
       navigate(`/projects/${canonicalProjectRef}/budget`, { replace: true });
       return;
