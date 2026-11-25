@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Conversations } from "./Conversations";
+import { api } from "@/api/client";
 
 vi.mock("@/context/CompanyContext", () => ({
   useCompany: () => ({ selectedCompanyId: "company", selectedCompany: null }),
@@ -72,4 +73,20 @@ describe("Conversations", () => {
     expect(container.textContent).toContain("Planning a community garden");
     expect(container.textContent).not.toContain("Notes on learning SQL");
   });
+  it("keeps a loading failure distinct from an empty library", async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error("Network unavailable"));
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    root = createRoot(container);
+    await act(async () => root!.render(
+      <QueryClientProvider client={client!}>
+        <MemoryRouter initialEntries={["/conversations"]}>
+          <Conversations />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ));
+    await waitForText("Conversation updates could not be loaded.");
+    expect(container.textContent).not.toContain("No conversations available.");
+    expect(container.textContent).toContain("Retry");
+  });
+
 });
