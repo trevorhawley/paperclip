@@ -216,25 +216,25 @@ export function CoordinatorNeedsYou() {
   };
   const duration = typeof document === "undefined" ? 0 : parseCssTimeMs(getComputedStyle(document.documentElement).getPropertyValue("--motion-duration-base")) / 1_000;
   if (!selectedCompanyId) return <p className="text-sm text-muted-foreground">Choose a company to see its decisions.</p>;
-  return <LayoutGroup id="coordinator-decisions"><section className="coordinator-needs-you mx-auto w-full max-w-4xl space-y-6" aria-label="Inbox">
+  return <LayoutGroup id="coordinator-decisions"><section className="coordinator-needs-you mx-auto w-full max-w-4xl space-y-4" aria-label="Inbox">
     {isMobile ? <Sheet open={historyOpen} onOpenChange={open => { if (!open) closeHistory(); }}>
       <SheetContent side="bottom" aria-describedby={undefined} className="mobile-task-side-panel inset-0 h-dvh max-h-dvh w-full max-w-none gap-0 border-0 p-0 pt-(--sz-safe-top) pb-(--sz-safe-bottom)">
         <SheetHeader><SheetTitle>Decision history</SheetTitle></SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto p-4"><HistoryPanel companyId={selectedCompanyId} agents={agentQuery.data ?? []} onClose={closeHistory} mobile /></div>
       </SheetContent>
     </Sheet> : null}
-    <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-medium">Inbox</h1>{view === "pending" ? <Button variant="ghost" onClick={showHistory}><History className="size-4" />Decision history</Button> : null}</header>
-    <div role="group" aria-label="Inbox view" className="flex flex-wrap items-center gap-2">
-      <Button variant={overview ? "secondary" : "ghost"} aria-pressed={overview} onClick={() => setView("overview")}>Overview</Button>
-      <Button variant={view === "pending" && !overview ? "secondary" : "ghost"} aria-pressed={view === "pending" && !overview} onClick={() => setView("pending")}>Pending decisions</Button>
+    <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-xl font-medium">Inbox</h1>{view === "pending" ? <Button variant="ghost" size="sm" onClick={showHistory}><History className="size-4" />Decision history</Button> : null}</header>
+    <div role="group" aria-label="Inbox view" className="flex flex-wrap items-center gap-1">
+      <Button size="sm" variant={overview ? "secondary" : "ghost"} aria-pressed={overview} onClick={() => setView("overview")}>Overview</Button>
+      <Button size="sm" variant={view === "pending" && !overview ? "secondary" : "ghost"} aria-pressed={view === "pending" && !overview} onClick={() => setView("pending")}>Pending decisions</Button>
       {(Object.keys(coordinatorWorkViews) as CoordinatorWorkStatus[]).map(status => (
-        <Button key={status} variant={view === status ? "secondary" : "ghost"} aria-pressed={view === status} onClick={() => setView(status)}>
+        <Button key={status} size="sm" variant={view === status ? "secondary" : "ghost"} aria-pressed={view === status} onClick={() => setView(status)}>
           {coordinatorWorkViews[status].title}
         </Button>
       ))}
     </div>
     {view !== "pending" ? <CoordinatorWorkList key={`${selectedCompanyId}:${userId}:${view}`} companyId={selectedCompanyId} userId={userId} status={view} /> : <>
-    {overview && <h2 className="text-lg font-medium">Decisions requiring attention</h2>}
+    {overview && <h2 className="text-sm font-semibold">Decisions requiring attention</h2>}
     <div hidden={overview} data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
       <ToolbarSearch query={query} onQueryChange={setQuery} label="Search decisions" placeholder="Search decisions or task IDs…" />
       <NativeSelect aria-label="Filter decisions by agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} className="w-auto"><option value="">All agents</option>{(agentQuery.data ?? []).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</NativeSelect>
@@ -245,7 +245,7 @@ export function CoordinatorNeedsYou() {
     {feedWaiting ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading decisions…</p> : null}
     {(feedView.kind === "error") ? <div role="alert" className="space-y-2"><p className="text-sm">Decisions could not be loaded.</p><Button variant="outline" onClick={() => void feed.refetch()}>Retry</Button></div> : null}
     {!feedWaiting && !(feedView.kind === "error") && filtered.length === 0 ? <div className="space-y-3 py-8 text-center"><p className="text-sm text-muted-foreground">{!overview && filtersActive && !visibleRecentItems.length ? "No decisions match these filters." : pendingItems.length ? "No open decisions match these filters." : "You're caught up."}</p><Button variant="ghost" onClick={showHistory}>Open decision history<ArrowUpRight className="size-4" /></Button></div> : null}
-    {groups.map(([label, items]) => <div key={label} className="space-y-4">{label ? <h2 className="text-sm font-medium text-muted-foreground">{label}</h2> : null}{items.map((item) => {
+    {groups.map(([label, items]) => <div key={label} className="space-y-1">{label ? <h2 className="text-sm font-medium text-muted-foreground">{label}</h2> : null}{items.map((item) => {
       const issueId = item.relatedIssue?.id ?? String(item.subject.metadata?.issueId ?? "");
       const interaction = item.sourceKind === "issue_thread_interaction" && isInlineResolvable(item) && issueId;
       const decision = item.sourceKind === "decision" && isInlineResolvable(item);
@@ -258,15 +258,15 @@ export function CoordinatorNeedsYou() {
       return <motion.div id={item.sourceKind === "decision" ? `coordinator-decision-${item.subject.id}` : undefined} tabIndex={item.sourceKind === "decision" ? -1 : undefined} layout={reducedMotion ? false : "position"} layoutId={reducedMotion ? undefined : id} transition={{ duration }} key={id}>
       <CoordinatorTaskMotion eventId={`decision:${selectedCompanyId}:${userId}:${id}`} phase={phase} createdAt={item.activityAt} className="coordinator-decision-motion"
         onSettled={() => setSettling(current => current.filter(entry => `${entry.sourceKind}:${entry.subject.id}` !== id))}>
-      {receipt ? <Receipt item={receipt} onOpen={navigate} /> : <article className="coordinator-decision-card space-y-4 rounded-xl border border-border bg-card p-6">
+      {receipt ? <Receipt item={receipt} onOpen={navigate} /> : <article className={interaction || decision || stalledReview ? "coordinator-decision-card space-y-3 rounded-lg border border-border bg-card p-4" : "coordinator-decision-card coordinator-decision-row flex min-w-0 items-center gap-3"}>
         {interaction ? <AttentionInteractionResolver footerSlot={taskLink} presentation="coordinator-decision" companyId={selectedCompanyId} issueId={issueId} interactionId={item.subject.id} agentMap={agentMap} currentUserId={userId} onResolved={resolved => {
           if (!resolved || resolved.status === "pending") { void feed.refetch(); void recent.refetch(); return; }
           onResolved(item);
         }} />
           : decision ? <DecisionResolver companyId={selectedCompanyId} decisionId={item.subject.id} originIssue={item.relatedIssue} agentMap={agentMap} onResolved={() => onResolved(item)} />
-          : stalledReview ? <><h2 className="text-lg font-medium">Choose how this task continues</h2><p className="text-sm">This task is still in review with no active reviewer or continuation. Return it to work, request changes, or mark the task done.</p><StalledReviewActions footerSlot={taskLink} issueId={item.subject.id} companyId={selectedCompanyId} reviewPolicy={readIssueReviewPolicyMetadata(item.subject.metadata)} approveLabel="Mark task done" onResolved={() => { void feed.refetch(); void recent.refetch(); }} /></>
-          : <><h2 className="text-lg font-medium">{item.subject.title ?? item.whyNow}</h2><p className="text-sm">{attentionDetailLine(item) ?? item.whyNow}</p><Button disabled={!item.subject.href} onClick={() => { if (item.subject.href) navigate(item.subject.href); }}>Open to review<ArrowUpRight className="size-4" /></Button></>}
-        {!interaction && !stalledReview ? taskLink : null}
+          : stalledReview ? <><h2 className="text-sm font-semibold">Choose how this task continues</h2><p className="text-sm">This task is still in review with no active reviewer or continuation. Return it to work, request changes, or mark the task done.</p><StalledReviewActions footerSlot={taskLink} issueId={item.subject.id} companyId={selectedCompanyId} reviewPolicy={readIssueReviewPolicyMetadata(item.subject.metadata)} approveLabel="Mark task done" onResolved={() => { void feed.refetch(); void recent.refetch(); }} /></>
+          : <><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.subject.title ?? item.whyNow}</p><p className="truncate text-xs text-muted-foreground">{[attentionDetailLine(item) ?? item.whyNow, taskRef && taskRef.title !== item.subject.title ? `${taskRef.identifier ?? ""} ${taskRef.title}`.trim() : taskRef?.identifier].filter(Boolean).join(" · ")}</p></div><Button size="sm" variant="ghost" className="shrink-0" disabled={!item.subject.href} onClick={() => { if (item.subject.href) navigate(item.subject.href); }}>Open<ArrowUpRight className="size-3.5" /></Button></>}
+        {decision ? taskLink : null}
       </article>}
       </CoordinatorTaskMotion>
       </motion.div>;
