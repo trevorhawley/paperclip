@@ -1856,6 +1856,11 @@ function RequestToolActionCard({
           <ToolActionAuditHashCopy hash={payload.argumentsHash} />
         </details>
       ) : <p className="mt-3 text-xs text-muted-foreground">Request arguments are unavailable.</p> : null}
+      {isPending && onRejectInteraction ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Decline applies to this action. The task may continue. Use the task controls to pause or cancel the work.
+        </p>
+      ) : null}
       {isPending ? (
         <DecisionCardFooter leading={footerSlot} className="mt-3">
           <div className={cn(!footerSlot && "mt-3", "flex flex-wrap items-center justify-end gap-2")}>

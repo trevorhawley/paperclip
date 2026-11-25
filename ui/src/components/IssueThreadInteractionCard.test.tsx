@@ -1297,7 +1297,7 @@ describe("IssueThreadInteractionCard tool-action card", () => {
     expect(host.textContent).toContain("Add 1 row");
     expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("Google Sheets");
     expect(host.textContent).toContain("Approve & run");
-    expect(host.textContent).toContain("Decline");
+    expect(host.textContent).toContain("Decline applies to this action. The task may continue.");
     expect(host.textContent).not.toContain("Append row to spreadsheet");
     expect(host.textContent).not.toContain("Technical details");
     expect(host.textContent).not.toContain("Expires");
