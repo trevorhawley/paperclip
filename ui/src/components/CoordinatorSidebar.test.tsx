@@ -107,21 +107,20 @@ describe("Coordinator pinned pages", () => {
   });
   it("keeps mixed pins in stored order and prevents native link dragging", async () => {
     fixture.agents = [{ id: "cto", companyId: "company", name: "CTO", urlKey: "cto", role: "cto", status: "idle" } as Agent];
-    const saved = ["agent-chat:company:cto", "agent-chat:another-company:hidden", "/artifacts", "/dashboard"];
+    const saved = ["agent-chat:company:cto", "agent-chat:another-company:hidden", "/apps", "/activity"];
     localStorage.setItem("paperclip.coordinator.pinned-nav.v1:reviewer", JSON.stringify(saved));
     await renderSidebar();
     const links = [...container.querySelectorAll<HTMLAnchorElement>(".design-sidebar-pins a")];
-    expect(links.map(link => link.textContent)).toEqual(["CTO", "Artifacts", "Dashboard"]);
+    expect(links.map(link => link.textContent)).toEqual(["CTO", "Connectors", "Audit"]);
     expect(JSON.parse(localStorage.getItem("paperclip.coordinator.pinned-nav.v1:reviewer")!)).toEqual(saved);
     const nativeDrag = new Event("dragstart", { bubbles: true, cancelable: true });
     act(() => links[1].dispatchEvent(nativeDrag));
     expect(nativeDrag.defaultPrevented).toBe(true);
   });
-  it.each([false, true])("keeps Cases reachable in More only when enabled (%s)", async enabled => {
+  it.each([false, true])("shows Cases at the top level only when enabled (%s)", async enabled => {
     fixture.enableCases = enabled;
     await renderSidebar();
-    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="More workspace pages"]')!.click());
-    expect(document.querySelector('a[href="/cases"]') !== null).toBe(enabled);
+    expect(container.querySelector('a[href="/cases"]') !== null).toBe(enabled);
   });
   it("announces unread chat totals in expanded and collapsed navigation", async () => {
     fixture.chats = [{ isUnreadForMe: true }, { isUnreadForMe: false }, { isUnreadForMe: true }];
@@ -143,46 +142,46 @@ describe("Coordinator pinned pages", () => {
   it.each([false, true])("restores and unpins pages in the Pinned section when collapsed is %s", async collapsed => {
     fixture.collapsed = collapsed;
     await renderSidebar();
-    expect(pinnedPage("/projects")).toBeNull();
-    await click("More workspace pages");
+    expect(pinnedPage("/settings")).toBeNull();
+    await click("Admin pages");
     expect(document.activeElement).toBe(document.querySelector('[data-slot="popover-content"]'));
-    await click("Pin Projects");
+    await click("Pin Settings");
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(pinnedPage("/projects")?.textContent).toBe("Projects");
+    expect(pinnedPage("/settings")?.textContent).toBe("Settings");
     expect(navigation().querySelector('[aria-label="Pinned pages"]')).toBeNull();
     if (!collapsed) expect(navigation().querySelector('[data-slot="sidebar-group-label"]')?.textContent).toBe("Pinned");
-    const more = navigation().querySelector('button[aria-label="More workspace pages"]')!;
-    expect(more.compareDocumentPosition(pinnedPage("/projects")!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    const more = navigation().querySelector('button[aria-label="Admin pages"]')!;
+    expect(more.compareDocumentPosition(pinnedPage("/settings")!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     await act(async () => root.unmount());
     root = createRoot(container);
     await renderSidebar();
-    expect(pinnedPage("/projects")).not.toBeNull();
-    if (collapsed) await click("More workspace pages");
-    await click("Unpin Projects");
-    expect(pinnedPage("/projects")).toBeNull();
+    expect(pinnedPage("/settings")).not.toBeNull();
+    if (collapsed) await click("Admin pages");
+    await click("Unpin Settings");
+    expect(pinnedPage("/settings")).toBeNull();
   });
 
   it("keeps pins personal and only renders known destinations", async () => {
-    localStorage.setItem("paperclip.coordinator.pinned-nav.v1:reviewer", JSON.stringify(["/routines", "/projects", "/unknown", "https://example.com"]));
+    localStorage.setItem("paperclip.coordinator.pinned-nav.v1:reviewer", JSON.stringify(["/activity", "/settings", "/unknown", "https://example.com"]));
     await renderSidebar();
     expect(Array.from(navigation().querySelectorAll("a")).map(link => link.getAttribute("href")))
-      .toEqual(["/chats", "/conversations", "/issues", "/decisions", "/routines", "/projects"]);
+      .toEqual(["/chats", "/conversations", "/issues", "/decisions", "/dashboard", "/projects", "/routines", "/artifacts", "/agents/all", "/skills", "/activity", "/settings"]);
     fixture.userId = "other-user";
     await renderSidebar();
-    expect(pinnedPage("/projects")).toBeNull();
+    expect(pinnedPage("/settings")).toBeNull();
     fixture.userId = "reviewer";
     await renderSidebar();
-    expect(pinnedPage("/projects")?.textContent).toBe("Projects");
+    expect(pinnedPage("/settings")?.textContent).toBe("Settings");
   });
 
   it("reflects pins changed in another browser tab", async () => {
     await renderSidebar();
     const key = "paperclip.coordinator.pinned-nav.v1:reviewer";
     await act(async () => {
-      localStorage.setItem(key, JSON.stringify(["/agents/all"]));
+      localStorage.setItem(key, JSON.stringify(["/apps"]));
       window.dispatchEvent(new StorageEvent("storage", { key }));
     });
-    expect(pinnedPage("/agents/all")?.textContent).toBe("Agents");
+    expect(pinnedPage("/apps")?.textContent).toBe("Connectors");
   });
 });
 afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); });
