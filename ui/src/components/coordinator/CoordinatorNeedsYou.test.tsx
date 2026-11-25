@@ -4,17 +4,18 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AttentionItem, DecisionHistoryItem } from "@paperclipai/shared";
+import type { AttentionItem, CompactIssue, DecisionHistoryItem } from "@paperclipai/shared";
 import { CoordinatorNeedsYou } from "./CoordinatorNeedsYou";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const fixture = vi.hoisted(() => ({ pending: [] as AttentionItem[], history: [] as DecisionHistoryItem[], url: "/decisions", mobile: false, partial: false, historyFail: false, feedFail: false, openPanel: vi.fn(), closePanel: vi.fn(), setPanelVisible: vi.fn(), navigate: vi.fn(), breadcrumbs: vi.fn() }));
-vi.mock("@/context/CompanyContext", () => ({ useCompany: () => ({ selectedCompanyId: "company" }) }));
+const fixture = vi.hoisted(() => ({ companyId: "company", completedList: vi.fn(), pending: [] as AttentionItem[], history: [] as DecisionHistoryItem[], url: "/decisions", mobile: false, partial: false, historyFail: false, feedFail: false, openPanel: vi.fn(), closePanel: vi.fn(), setPanelVisible: vi.fn(), navigate: vi.fn(), breadcrumbs: vi.fn() }));
+vi.mock("@/context/CompanyContext", () => ({ useCompany: () => ({ selectedCompanyId: fixture.companyId, selectedCompany: { issuePrefix: fixture.companyId === "company" ? "PAP" : "OTHER" } }) }));
 vi.mock("@/context/BreadcrumbContext", () => ({ useBreadcrumbs: () => ({ setBreadcrumbs: fixture.breadcrumbs }) }));
 vi.mock("@/context/PanelContext", () => ({ usePanel: () => ({ openPanel: fixture.openPanel, closePanel: fixture.closePanel, setPanelVisible: fixture.setPanelVisible }) }));
 vi.mock("@/context/SidebarContext", () => ({ useSidebar: () => ({ isMobile: fixture.mobile }) }));
 vi.mock("@/hooks/useCoordinatorWorkspaceEnabled", () => ({ useCoordinatorWorkspaceEnabled: () => ({ userId: "reviewer" }) }));
 vi.mock("@/lib/router", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/router")>(), useNavigate: () => fixture.navigate }));
+vi.mock("@/api/issues", () => ({ issuesApi: { listCompact: fixture.completedList } }));
 vi.mock("@/api/agents", () => ({ agentsApi: { list: async () => [] } }));
 vi.mock("@/api/projects", () => ({ projectsApi: { list: async () => [] } }));
 vi.mock("@/api/attention", () => ({ attentionApi: {
@@ -47,6 +48,7 @@ let container: HTMLDivElement;
 beforeEach(() => {
   fixture.pending = ["1", "2", "3"].map((id) => ({ id, sourceKind: "issue_thread_interaction", inlineResolvable: true, subject: { id, kind: "interaction", title: `Review ${id}`, metadata: { issueId: `task-${id}` } }, relatedIssue: { id: `task-${id}`, identifier: `PAP-${id}`, title: `Task ${id}`, href: `/PAP/issues/PAP-${id}` }, activityAt: new Date().toISOString() } as unknown as AttentionItem));
   fixture.history = []; fixture.url = "/decisions"; vi.clearAllMocks();
+  fixture.companyId = "company"; fixture.completedList.mockReset().mockResolvedValue([]);
   fixture.historyFail = false; fixture.feedFail = false; fixture.partial = false; fixture.mobile = false;
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
 });
@@ -57,7 +59,85 @@ async function click(text: string) {
   expect(button, text).toBeTruthy();
   await act(async () => button!.click()); await flush();
 }
+function completedTask(id: string, title: string, status = "done", companyId = "company", completedAt: Date | null = new Date("2026-11-20T12:00:00Z")) {
+  return { id, identifier: companyId === "company" ? `PAP-${id}` : `OTHER-${id}`, title, status, companyId, completedAt } as CompactIssue;
+}
+
 describe("Coordinator Needs You", () => {
+  it("loads bounded completed work on demand, preserves activity order and pending filters, and links tasks", async () => {
+    // Motion receipts are tracked by event identity for the whole UI session.
+    // Use distinct decision identities so this test cannot consume another test’s animation.
+    fixture.pending = fixture.pending.map((item, index) => ({
+      ...item,
+      id: String(101 + index),
+      subject: { ...item.subject, id: String(101 + index), metadata: { issueId: `task-${101 + index}` } },
+      relatedIssue: { ...item.relatedIssue!, id: `task-${101 + index}`, identifier: `PAP-${101 + index}`, title: `Task ${101 + index}`, href: `/PAP/issues/PAP-${101 + index}` },
+    }));
+    fixture.completedList.mockResolvedValue([
+      completedTask("20", "Older completion", "done", "company", new Date("2026-11-19T12:00:00Z")),
+      completedTask("21", "Newer completion", "done", "company", new Date("2026-11-20T12:00:00Z")),
+      completedTask("22", "Missing date", "done", "company", null),
+      completedTask("23", "Still open", "in_progress"),
+      completedTask("24", "Cancelled", "cancelled"),
+      completedTask("25", "Wrong company", "done", "other"),
+    ]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><CoordinatorNeedsYou /></MemoryRouter></QueryClientProvider>));
+    await flush();
+    expect(fixture.completedList).not.toHaveBeenCalled();
+    expect(container.querySelectorAll("article")).toHaveLength(3);
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Sort decisions"]')!;
+    await act(async () => { select.value = "oldest"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await click("Completed work"); await flush();
+    expect(fixture.completedList).toHaveBeenCalledWith("company", { status: "done", projection: "index", sortField: "updated", sortDir: "desc", limit: 50 }, expect.objectContaining({ cache: "no-store" }));
+    const section = container.querySelector('[aria-label="Completed work"]')!;
+    expect(section.textContent).toContain("most recent activity first");
+    expect([...section.querySelectorAll("a")].map(a => a.getAttribute("href"))).toEqual(["/PAP/issues/PAP-20", "/PAP/issues/PAP-21", "/PAP/issues/PAP-22"]);
+    expect(section.textContent).toContain("Older completion");
+    expect(section.textContent).toContain("Completion date unavailable");
+    expect(section.querySelector("time")?.getAttribute("datetime")).toBe("2026-11-19T12:00:00.000Z");
+    expect(section.textContent).not.toMatch(/Still open|Cancelled|Wrong company/);
+    expect(container.querySelector('[aria-label="Decisions controls"]')).toBeNull();
+    await click("Pending decisions");
+    expect(container.querySelector<HTMLSelectElement>('select[aria-label="Sort decisions"]')?.value).toBe("oldest");
+    expect(container.querySelectorAll("article")).toHaveLength(3);
+    await click("Resolve 101");
+    expect(container.querySelector('[data-issue-id="task-101"]')).toBeNull();
+    client.clear();
+  });
+
+  it("shows loading and empty states and isolates a company switch during a pending read", async () => {
+    let resolveOld!: (tasks: CompactIssue[]) => void;
+    fixture.completedList.mockImplementation((companyId: string) => companyId === "company"
+      ? new Promise<CompactIssue[]>(resolve => { resolveOld = resolve; })
+      : Promise.resolve([]));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const render = async () => { await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><CoordinatorNeedsYou /></MemoryRouter></QueryClientProvider>)); await flush(); };
+    await render();
+    await click("Completed work");
+    expect(container.textContent).toContain("Loading completed work");
+    fixture.companyId = "other";
+    await render();
+    expect(container.textContent).toContain("No completed tasks.");
+    expect(fixture.completedList).toHaveBeenCalledWith("other", expect.objectContaining({ status: "done" }), expect.anything());
+    await act(async () => resolveOld([completedTask("20", "Old company task")])); await flush();
+    expect(container.textContent).not.toContain("Old company task");
+    client.clear();
+  });
+
+  it("shows a recoverable completed-work error without replacing pending decisions", async () => {
+    fixture.completedList.mockRejectedValueOnce(new Error("Unavailable")).mockResolvedValue([completedTask("20", "Recovered task")]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><CoordinatorNeedsYou /></MemoryRouter></QueryClientProvider>));
+    await flush(); await click("Completed work"); await flush();
+    expect(container.querySelector('[aria-label="Completed work"] [role="alert"]')?.textContent).toContain("Completed work could not be loaded.");
+    await click("Retry"); await flush();
+    expect(container.textContent).toContain("Recovered task");
+    await click("Pending decisions");
+    expect(container.querySelectorAll("article")).toHaveLength(3);
+    client.clear();
+  });
+
   it("reveals and focuses a linked decision beyond the first rendering window, then consumes only its URL parameter", async () => {
     fixture.url = "/decisions?decisionId=target&q=kept";
     fixture.pending = Array.from({ length: 61 }, (_, index) => ({ ...fixture.pending[0], id: `decision-${index}`, sourceKind: "decision",

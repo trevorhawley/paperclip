@@ -449,6 +449,9 @@ so the conversation stays open.
 Coordinator navigation uses **Chat**, **Tasks**, and **Inbox**. Inbox uses the
 inbox icon and keeps the existing decision feed, its count, and decision history
 at `/decisions`. The previous Inbox destination under More is removed.
+Pending decisions remain the default Inbox view. Completed work is a separate,
+read-only view that loads up to 50 visible done tasks for the active company,
+ordered by latest activity. It shows the recorded completion date when available.
 
 Tasks defaults to **All tasks**, with a saved view per person and company. Mine uses
 the previous Inbox's personal participation rules, mixed attention items,

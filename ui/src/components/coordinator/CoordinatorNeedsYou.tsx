@@ -30,6 +30,7 @@ import { parseCssTimeMs } from "@/components/task-chat/motion-tokens";
 import { readIssueReviewPolicyMetadata } from "@/lib/review-policy";
 import { CoordinatorDecisionReceipt as Receipt } from "./CoordinatorDecisionReceipt";
 import { CoordinatorTaskMotion } from "./CoordinatorTaskCommitment";
+import { CoordinatorCompletedWork } from "./CoordinatorCompletedWork";
 
 type Group = "none" | "task" | "agent" | "project";
 
@@ -94,6 +95,7 @@ export function CoordinatorNeedsYou() {
   const [groupBy, setGroupBy] = useState<Group>("none");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [view, setView] = useState<"pending" | "completed">("pending");
   const [now, setNow] = useState(Date.now);
   const [settling, setSettling] = useState<AttentionItem[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
@@ -153,6 +155,7 @@ export function CoordinatorNeedsYou() {
   }, [filtered, groupBy, renderLimit]);
   useEffect(() => {
     if (!deepLinkDecisionId || !selectedCompanyId || !pendingItems.some(item => item.sourceKind === "decision" && item.subject.id === deepLinkDecisionId)) return;
+    if (view !== "pending") { setView("pending"); return; }
     // A saved decision link takes precedence over local toolbar filters and the
     // rendering window. Consume it only after its actual card has mounted.
     if (query || agentFilter || projectFilter) { setQuery(""); setAgentFilter(""); setProjectFilter(""); return; }
@@ -163,7 +166,7 @@ export function CoordinatorNeedsYou() {
     card.focus({ preventScroll: true });
     card.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
     setSearchParams(current => { const next = new URLSearchParams(current); next.delete("decisionId"); return next; }, { replace: true });
-  }, [deepLinkDecisionId, selectedCompanyId, pendingItems, filtered, query, agentFilter, projectFilter, renderLimit, reducedMotion, setSearchParams]);
+  }, [deepLinkDecisionId, selectedCompanyId, pendingItems, filtered, query, agentFilter, projectFilter, renderLimit, reducedMotion, setSearchParams, view]);
   const projects = useMemo(() => [...new Map([
     ...pendingItems.flatMap((item) => item.project ? [[item.project.id, item.project.name] as const] : []),
     ...recentItems.flatMap((item) => item.projectId ? [[item.projectId, item.projectName ?? "Unnamed project"] as const] : []),
@@ -205,7 +208,12 @@ export function CoordinatorNeedsYou() {
         <div className="min-h-0 flex-1 overflow-y-auto p-4"><HistoryPanel companyId={selectedCompanyId} agents={agentQuery.data ?? []} onClose={closeHistory} mobile /></div>
       </SheetContent>
     </Sheet> : null}
-    <header className="flex items-center justify-between gap-3"><h1 className="text-2xl font-medium">Inbox</h1><Button variant="ghost" onClick={showHistory}><History className="size-4" />Decision history</Button></header>
+    <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-medium">Inbox</h1>{view === "pending" ? <Button variant="ghost" onClick={showHistory}><History className="size-4" />Decision history</Button> : null}</header>
+    <div role="group" aria-label="Inbox view" className="flex flex-wrap items-center gap-2">
+      <Button variant={view === "pending" ? "secondary" : "ghost"} aria-pressed={view === "pending"} onClick={() => setView("pending")}>Pending decisions</Button>
+      <Button variant={view === "completed" ? "secondary" : "ghost"} aria-pressed={view === "completed"} onClick={() => { closeHistory(); setView("completed"); }}>Completed work</Button>
+    </div>
+    {view === "completed" ? <CoordinatorCompletedWork key={`${selectedCompanyId}:${userId}`} companyId={selectedCompanyId} userId={userId} /> : <>
     <div data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
       <ToolbarSearch query={query} onQueryChange={setQuery} label="Search decisions" placeholder="Search decisions or task IDs…" />
       <NativeSelect aria-label="Filter decisions by agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} className="w-auto"><option value="">All agents</option>{(agentQuery.data ?? []).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</NativeSelect>
@@ -245,5 +253,6 @@ export function CoordinatorNeedsYou() {
     {filtered.length > renderLimit ? <Button variant="outline" onClick={() => setRenderLimit((value) => value + 40)}>Show more decisions</Button> : null}
     {visibleRecentItems.length ? <section className="space-y-3" aria-label="Recent Decisions"><h2 className="text-sm font-medium text-muted-foreground">Recent Decisions</h2>{recentGroups.map(([label, items]) => <div key={label} className="space-y-3">{label ? <h3 className="text-sm font-medium text-muted-foreground">{label}</h3> : null}{items.map((item) => <motion.div layout={!reducedMotion} layoutId={reducedMotion ? undefined : item.id} transition={{ duration }} key={item.id}><Receipt item={item} onOpen={navigate} /></motion.div>)}</div>)}</section> : null}
     {(recentView.kind === "error") ? <p role="alert" className="text-sm text-muted-foreground">Recent decisions could not be loaded. <button className="underline" onClick={() => void recent.refetch()}>Retry</button></p> : null}
+    </>}
   </section></LayoutGroup>;
 }
