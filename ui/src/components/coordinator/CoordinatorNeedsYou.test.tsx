@@ -64,6 +64,35 @@ function completedTask(id: string, title: string, status = "done", companyId = "
 }
 
 describe("Coordinator Needs You", () => {
+  it("opens a shareable work view, loads only its status, and isolates the next view", async () => {
+    fixture.pending = [];
+    fixture.completedList.mockImplementation((_companyId, { status }) => Promise.resolve([
+      completedTask("30", "Waiting on a dependency", "blocked"),
+      completedTask("31", "Writing the brief", "in_progress"),
+      completedTask("32", "Another company's task", status, "other"),
+    ]));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => root.render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/PAP/decisions?work=blocked"]}><CoordinatorNeedsYou /><Location /></MemoryRouter>
+      </QueryClientProvider>,
+    ));
+    await flush();
+
+    const blocked = container.querySelector('[aria-label="Blocked work"]')!;
+    expect(blocked.textContent).toContain("Waiting on a dependency");
+    expect(blocked.textContent).not.toMatch(/Writing the brief|Another company's task/);
+    expect(fixture.completedList.mock.calls.map(([, params]) => params.status)).toEqual(["blocked"]);
+
+    await click("In progress");
+    expect(container.querySelector("[data-location]")?.textContent).toBe("?work=in_progress");
+    const active = container.querySelector('[aria-label="In progress"]')!;
+    expect(active.textContent).toContain("Writing the brief");
+    expect(active.textContent).not.toMatch(/Waiting on a dependency|Another company's task/);
+    expect(fixture.completedList.mock.calls.map(([, params]) => params.status)).toEqual(["blocked", "in_progress"]);
+    client.clear();
+  });
+
   it("loads bounded completed work on demand, preserves activity order and pending filters, and links tasks", async () => {
     // Motion receipts are tracked by event identity for the whole UI session.
     // Use distinct decision identities so this test cannot consume another test’s animation.
