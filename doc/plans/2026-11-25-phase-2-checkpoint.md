@@ -1,30 +1,26 @@
 # Phase 2 checkpoint
 
-Verified on 2026-11-25. Branch and CI status can change; check GitHub before
-integration. Production deployment requires separate authorization.
+Baseline: dev commit `4839a8661`. PRs #4–#7 are integrated. Combined signed-in
+DEV acceptance verified project task return navigation, local conversation
+history, persistent task links and the Inbox Completed work view. The optional
+provider passed browser and local Supabase validation with synthetic records.
 
-| Workstream | State | Next step |
+| Workstream | Verified baseline | Remaining |
 | --- | --- | --- |
-| P2-01 Conversations | PR #4 adds a read-only list of passive updates. A separate local acceptance branch includes synthetic Memory records, filters, and existing native chat links. | Complete PR #4 CI and integrate. Move the additional preview changes to a focused branch based on the resulting dev head and validate. |
-| P2-02 Inbox | PR #5 adds the Coordinator Inbox completed-work view. Synthetic DEV tasks show completion dates and link to the correct task. | Complete CI and remaining acceptance, then integrate against current dev. |
-| P2-03 Projects and tasks | Existing Paperclip projects, task links and project documents remain in use. | Add conversation associations after the reference model is implemented. |
-| P2-04 Provenance | Phase 1 records self-reported external platform, model and chat URL on passive comments. | Extend presentation as conversation sources become available, preserving human attribution. |
-| P2-05 Trevor AI Memory | Local-first hybrid direction approved. Existing retrieval supports query and session lookup. The local unified preview uses synthetic data. | Implement scoped, optional read access and a bounded recent-history capability. Verify with synthetic DEV data before live configuration. |
-| P2-06 Delegation | Phase 1 explicit handoff exists. | Separately verify native execution and improve the deliberate handoff experience. |
-| P2-07 Platform acceptance | Cloud ChatGPT passive collaboration was previously accepted. | Verify Claude, Claude Code and Hermes integrations as applicable. |
+| P2-01 Conversations | Paperclip updates, native chats and optional Memory share a searchable workspace. Conversation–task links persist across reloads. | Improve project navigation and access to existing related work. |
+| P2-02 Inbox | Pending decisions, decision history and Completed work are available. | DEV increment adds In progress and Blocked work using the existing compact tasks API. Validate task return navigation from each view. |
+| P2-03 Projects and tasks | Project task details return to the project's Tasks tab, including after reload. | Surface more of the existing conversation, decision and deliverable context from projects. |
+| P2-04 Provenance | Passive updates preserve human attribution and display recorded AI metadata. | Use consistent source labels across conversations, tasks and activity. Mobile Voice passive writes can arrive without structured provenance. Display absent metadata as absent. |
+| P2-05 Trevor AI Memory | Optional, read-only provider tested with isolated Supabase. Local history works through disabled, slow and unavailable provider states. | Live configuration requires separate authorization. |
+| P2-06 Delegation | Explicit native-agent delegation from mobile ChatGPT Voice passed production acceptance. | Improve discovery and clarity of deliberate handoff in DEV. Preserve the existing execution boundary. |
+| P2-07 Platform acceptance | ChatGPT mobile Voice read, passive write and explicit delegation passed production acceptance on November 25. | Accept Claude, Claude Code and Hermes with DEV records. Record the client's actual capabilities and any missing metadata. |
 
-The local acceptance branch contains cherry-picks of PR #5 solely for DEV
-browser inspection. The original feature branches and commits remain available.
+Use existing task and approval state and delivery infrastructure for lightweight
+completion, blocker and approval notifications. Confirm that a passive write
+cannot cause delegation, and keep agent invocation behind the existing explicit
+handoff action.
 
-## Interface and future acceptance
-
-Native ChatGPT web and mobile are Trevor's primary conversational interface and
-executive coordinator. Paperclip provides operations, context, coordination and
-deliberate execution across assistants. Conversations can originate externally.
-Keep authenticated MCP reads, passive progress recording, task management and
-explicit delegation available.
-
-Future cross-client acceptance includes ChatGPT mobile Voice mode with the
-Paperclip connector. Verify hands-free project discussion, context retrieval,
-progress updates and deliberate delegation when that client supports the
-connection. This is a separate acceptance item, not a gate for current work.
+Native ChatGPT web and mobile remain Trevor's primary conversational interface.
+Paperclip handles operations, context, coordination and deliberate execution
+across assistants. Continue using synthetic records in DEV. Production
+deployment and live personal Memory connection each require authorization.

@@ -30,7 +30,7 @@ import { parseCssTimeMs } from "@/components/task-chat/motion-tokens";
 import { readIssueReviewPolicyMetadata } from "@/lib/review-policy";
 import { CoordinatorDecisionReceipt as Receipt } from "./CoordinatorDecisionReceipt";
 import { CoordinatorTaskMotion } from "./CoordinatorTaskCommitment";
-import { CoordinatorCompletedWork } from "./CoordinatorCompletedWork";
+import { CoordinatorWorkList, coordinatorWorkViews, type CoordinatorWorkStatus } from "./CoordinatorWorkList";
 
 type Group = "none" | "task" | "agent" | "project";
 
@@ -95,7 +95,8 @@ export function CoordinatorNeedsYou() {
   const [groupBy, setGroupBy] = useState<Group>("none");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [view, setView] = useState<"pending" | "completed">("pending");
+  const work = searchParams.get("work");
+  const view = !deepLinkDecisionId && (work === "in_progress" || work === "blocked" || work === "done") ? work : "pending";
   const [now, setNow] = useState(Date.now);
   const [settling, setSettling] = useState<AttentionItem[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
@@ -165,7 +166,7 @@ export function CoordinatorNeedsYou() {
     if (!card) return;
     card.focus({ preventScroll: true });
     card.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
-    setSearchParams(current => { const next = new URLSearchParams(current); next.delete("decisionId"); return next; }, { replace: true });
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete("decisionId"); next.delete("work"); return next; }, { replace: true });
   }, [deepLinkDecisionId, selectedCompanyId, pendingItems, filtered, query, agentFilter, projectFilter, renderLimit, reducedMotion, setSearchParams, view]);
   const projects = useMemo(() => [...new Map([
     ...pendingItems.flatMap((item) => item.project ? [[item.project.id, item.project.name] as const] : []),
@@ -173,6 +174,16 @@ export function CoordinatorNeedsYou() {
   ]).entries()], [pendingItems, recentItems]);
   const filtersActive = Boolean(query.trim() || agentFilter || projectFilter);
   const closeHistory = useCallback(() => { setHistoryOpen(false); closePanel(); }, [closePanel]);
+  const setView = (nextView: CoordinatorWorkStatus | "pending") => {
+    if (nextView !== "pending") closeHistory();
+    setSearchParams(current => {
+      const next = new URLSearchParams(current);
+      next.delete("decisionId");
+      if (nextView === "pending") next.delete("work");
+      else next.set("work", nextView);
+      return next;
+    });
+  };
   const showHistory = () => { setHistoryOpen(true); if (!isMobile) setPanelVisible(true); };
   useEffect(() => { setBreadcrumbs([{ label: "Inbox" }]); }, [setBreadcrumbs]);
   useEffect(() => {
@@ -211,9 +222,13 @@ export function CoordinatorNeedsYou() {
     <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-medium">Inbox</h1>{view === "pending" ? <Button variant="ghost" onClick={showHistory}><History className="size-4" />Decision history</Button> : null}</header>
     <div role="group" aria-label="Inbox view" className="flex flex-wrap items-center gap-2">
       <Button variant={view === "pending" ? "secondary" : "ghost"} aria-pressed={view === "pending"} onClick={() => setView("pending")}>Pending decisions</Button>
-      <Button variant={view === "completed" ? "secondary" : "ghost"} aria-pressed={view === "completed"} onClick={() => { closeHistory(); setView("completed"); }}>Completed work</Button>
+      {(Object.keys(coordinatorWorkViews) as CoordinatorWorkStatus[]).map(status => (
+        <Button key={status} variant={view === status ? "secondary" : "ghost"} aria-pressed={view === status} onClick={() => setView(status)}>
+          {coordinatorWorkViews[status].title}
+        </Button>
+      ))}
     </div>
-    {view === "completed" ? <CoordinatorCompletedWork key={`${selectedCompanyId}:${userId}`} companyId={selectedCompanyId} userId={userId} /> : <>
+    {view !== "pending" ? <CoordinatorWorkList key={`${selectedCompanyId}:${userId}:${view}`} companyId={selectedCompanyId} userId={userId} status={view} /> : <>
     <div data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
       <ToolbarSearch query={query} onQueryChange={setQuery} label="Search decisions" placeholder="Search decisions or task IDs…" />
       <NativeSelect aria-label="Filter decisions by agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} className="w-auto"><option value="">All agents</option>{(agentQuery.data ?? []).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</NativeSelect>
