@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { Agent, CompactIssue } from "@paperclipai/shared";
+import { latestFailedRunsByAgent, type Agent, type CompactIssue, type HeartbeatRun } from "@paperclipai/shared";
 import { heartbeatsApi } from "@/api/heartbeats";
 import { issuesApi } from "@/api/issues";
 import { projectsApi } from "@/api/projects";
@@ -11,6 +11,14 @@ import { queryKeys } from "@/lib/queryKeys";
 import { Link, useLocation } from "@/lib/router";
 
 const LIMIT = 6;
+const FAILED_RUN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function issueIdForRun(run: HeartbeatRun) {
+  if (run.issueId) return run.issueId;
+  const context = run.contextSnapshot;
+  const id = context?.["issueId"] ?? context?.["taskId"];
+  return typeof id === "string" && id ? id : null;
+}
 
 export function CoordinatorInboxOverview({ companyId, userId, agents }: {
   companyId: string;
@@ -46,7 +54,18 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
     },
     refetchInterval,
   });
-  const liveIds = [...new Set((live.data ?? []).flatMap(run => run.issueId ? [run.issueId] : []))].sort();
+  const failures = useQuery({
+    queryKey: ["coordinator-inbox-failed-runs", companyId, userId],
+    queryFn: () => heartbeatsApi.list(companyId, undefined, 200, { summary: true, latestFailuresOnly: true }),
+    refetchInterval,
+  });
+  const failedRuns = latestFailedRunsByAgent(failures.data ?? [])
+    .filter(run => Date.now() - new Date(run.finishedAt ?? run.createdAt).getTime() < FAILED_RUN_WINDOW_MS)
+    .slice(0, LIMIT);
+  const liveIds = [...new Set([
+    ...(live.data ?? []).flatMap(run => run.issueId ? [run.issueId] : []),
+    ...failedRuns.flatMap(run => { const id = issueIdForRun(run); return id ? [id] : []; }),
+  ])].sort();
   const liveTasks = useQuery({
     queryKey: [...queryKeys.issues.list(companyId), "inbox-run-tasks", userId, liveIds],
     queryFn: ({ signal }) => issuesApi.listCompact(companyId, { ids: liveIds, projection: "index", limit: liveIds.length }, { signal }),
@@ -71,6 +90,9 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
       typeof model === "string" && model.trim() ? `Configured model: ${model}` : undefined].filter(Boolean).join(" · ");
   }
 
+  const failedTasks = failedRuns.map(run => ({ run, task: issueById.get(issueIdForRun(run) ?? "") }))
+    .filter(({ task }) => task?.status !== "done" && task?.status !== "cancelled");
+
   return <div className="space-y-5">
     <section aria-label="Executing now" className="space-y-2">
       <h2 className="text-lg font-medium">Executing now</h2>
@@ -88,6 +110,20 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
         </article>;
       })}
     </section>
+    {failures.isError ? <p role="alert" className="text-sm">Failed runs could not be loaded. <Button variant="ghost" onClick={() => void failures.refetch()}>Retry</Button></p> :
+      failedTasks.length > 0 && <section aria-label="Runs that failed" className="space-y-2">
+        <h2 className="text-lg font-medium">Runs that failed</h2>
+        {failedTasks.map(({ run, task }) => {
+          const agent = agents.get(run.agentId);
+          const time = run.finishedAt ?? run.createdAt;
+          return <article key={run.id} className="space-y-1 rounded-lg border border-border p-3 text-sm">
+            {task ? taskName(task) : <span className="font-medium">{agent?.name ?? "Agent run"}</span>}
+            <p className="text-muted-foreground">{[run.status === "timed_out" ? "Timed out" : "Failed", agent?.name].filter(Boolean).join(" · ")}</p>
+            {run.error?.trim() && <p className="line-clamp-2 break-words">{run.error.trim()}</p>}
+            <p className="text-xs text-muted-foreground"><time dateTime={new Date(time).toISOString()}>{new Date(time).toLocaleString()}</time> · <Link className="underline" to={`/agents/${run.agentId}/runs/${run.id}`}>View run</Link></p>
+          </article>;
+        })}
+      </section>}
     {work.isPending ? <p role="status">Loading recent work…</p> : work.isError ?
       <p role="alert">Recent work could not be loaded. <Button variant="ghost" onClick={() => void work.refetch()}>Retry</Button></p> : null}
     {work.data && <>

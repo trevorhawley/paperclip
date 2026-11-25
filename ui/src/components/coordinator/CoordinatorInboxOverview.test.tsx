@@ -9,8 +9,9 @@ import { CoordinatorInboxOverview } from "./CoordinatorInboxOverview";
 const fixture = vi.hoisted(() => ({
   live: vi.fn(),
   list: vi.fn(),
+  runs: vi.fn(async (): Promise<unknown[]> => []),
 }));
-vi.mock("@/api/heartbeats", () => ({ heartbeatsApi: { liveRunsForCompany: fixture.live } }));
+vi.mock("@/api/heartbeats", () => ({ heartbeatsApi: { liveRunsForCompany: fixture.live, list: fixture.runs } }));
 vi.mock("@/api/issues", () => ({ issuesApi: { listCompact: fixture.list } }));
 vi.mock("@/api/projects", () => ({ projectsApi: { list: async () => [{ id: "project", name: "Editorial" }] } }));
 vi.mock("@/context/CompanyContext", () => ({ useCompany: () => ({ selectedCompany: { issuePrefix: "PAP" } }) }));
@@ -22,7 +23,13 @@ it("separates running and queued work from stored status, and shows the blocker 
     { id: "run-1", status: "running", agentId: "agent", agentName: "Researcher", issueId: active.id, currentStatusMessage: "Reviewing sources" },
     { id: "run-2", status: "queued", agentId: "agent", agentName: "Researcher" },
   ]);
-  fixture.list.mockImplementation(async (_company, filters) => filters.ids ? [active] : ({
+  const now = new Date().toISOString();
+  fixture.runs.mockResolvedValue([
+    { id: "run-f", agentId: "writer", status: "failed", issueId: "5", error: "Model provider rejected the request", createdAt: now, finishedAt: now },
+    { id: "run-d", agentId: "editor", status: "timed_out", issueId: "4", error: "Old failure on a finished task", createdAt: now, finishedAt: now },
+  ]);
+  const failedTask = { ...task("5", "Draft newsletter"), status: "todo" };
+  fixture.list.mockImplementation(async (_company, filters) => filters.ids ? [active, failedTask, { ...task("4", "Finished task"), status: "done" }] : ({
     in_progress: [active, task("2", "Status only")],
     blocked: [{ ...task("3", "Waiting for access"), blockedInboxAttention: {
       owner: { label: "Workspace owner" }, action: { label: "Approve access", detail: "Approve the requested access" },
@@ -46,6 +53,8 @@ it("separates running and queued work from stored status, and shows the blocker 
     expect(container.querySelector('[aria-label="Marked in progress"]')?.textContent).toContain("Status only");
     expect(container.querySelector('[aria-label="Marked in progress"]')?.textContent).not.toContain("Running task");
     expect(container.querySelector('[aria-label="Blocked work"]')?.textContent).toMatch(/Approve the requested access.*Workspace owner/);
+    await vi.waitFor(() => expect(container.querySelector('[aria-label="Runs that failed"]')?.textContent).toMatch(/Draft newsletter.*Failed.*Model provider rejected the request.*View run/));
+    expect(container.querySelector('[aria-label="Runs that failed"]')?.textContent).not.toContain("Old failure");
     expect(container.querySelector('[aria-label="Recently completed"]')?.textContent).toContain("Finished task");
   } finally {
     await act(async () => root.unmount());
