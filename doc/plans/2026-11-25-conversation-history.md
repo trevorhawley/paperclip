@@ -42,3 +42,36 @@ implementing standalone retrieval. Use the existing session ID as the
 external reference and establish the policy for showing private memory in a
 Paperclip company. Determine the need for persistent task associations after
 reviewing real history in the workspace.
+
+## Unified library preview
+
+On a Vite development server, add `?preview=memory` to the Conversations
+URL. This opt-in presents synthetic standalone sessions alongside Paperclip
+updates. The source filter switches between them. Search covers decisions
+and action items as well as the summary and existing filters. The sample
+module uses invented titles and IDs and makes no requests to Supabase.
+
+## Proposed Memory access
+
+The current Memory Edge Function supports query-based hybrid search and a
+UUID detail lookup. It requires search text and returns at most 25 hits.
+The effective link comes from the existing linked-session view. Source is
+a free-form label and sometimes includes a model. The session date describes
+the conversation. Supabase insertion time does not describe last activity.
+
+Use a separate server-to-server read credential for this library. Review
+whether to add a narrowly scoped Supabase read surface that supports bounded
+recent pages, keyword search and UUID lookup with a fixed field allowlist.
+Keep the broader Memory search token and service-role credential out of
+Paperclip. The Paperclip route should default to disabled and require the
+configured company and user IDs, an authenticated browser session and active
+owner membership before contacting Memory. Apply the same check to list and
+detail and keep credentials server-side. An unavailable source should leave
+Paperclip results usable. Review this boundary before implementing live reads.
+
+Keep original Memory UUIDs and Paperclip issue UUIDs. If manual linking is
+needed, review a relation that stores only the company ID, Memory UUID and
+issue UUID with a unique constraint for that combination. A project may be
+attached by its ID independently. Resolve these references through existing
+Paperclip authorization. Read and link operations should never create tasks
+or request execution. The synthetic preview adds no persistent associations.
