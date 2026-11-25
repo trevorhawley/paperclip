@@ -116,13 +116,16 @@ function ConversationHistory({ companyId }: { companyId: string }) {
           <Input type="date" value={since}
             onInput={event => { setSince(event.currentTarget.value); if (selectedId) selectUpdate(); }} />
         </label>
+        {updates.isSuccess && updates.data.length >= 100 && (
+          <p className="text-sm text-muted-foreground">Searching the latest 100 Paperclip updates.</p>
+        )}
       </div>
       {updates.isPending && <p role="status">Loading conversation updates…</p>}
       {updates.isError && <div className="flex items-center gap-2" role="alert">
         <p>Conversation updates could not be loaded.</p>
         <Button variant="outline" onClick={() => void updates.refetch()}>Retry</Button>
       </div>}
-      {!updates.isPending && visible.length === 0 && <p className="text-sm text-muted-foreground">
+      {updates.isSuccess && visible.length === 0 && <p className="text-sm text-muted-foreground">
         {entries.length ? "No conversations match your filters." : "No conversations available."}
       </p>}
       {(visible.length > 0 || (!updates.isPending && selectedId)) && (
