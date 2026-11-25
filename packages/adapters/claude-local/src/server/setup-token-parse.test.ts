@@ -95,6 +95,22 @@ function hardWrap(text: string, width: number): string {
 }
 
 describe("parseSetupTokenPrompt", () => {
+  it("accepts the 2.1.330 short Claude URL with its wrapped copy hint", () => {
+    const url = `https://claude.ai/oauth/authorize?${"a".repeat(44)}`;
+    const screen = (candidate: string, prompt = "Paste code here >") => [
+      "Use the URL below to sign in (c to copy)",
+      candidate,
+      "Hold Shift (Option in iTerm2, Fn in Terminal.app) while selecting to use your",
+      "terminal's native copy",
+      prompt,
+    ].join("\n");
+    expect(parseSetupTokenPrompt(screen(url))?.url).toBe(url);
+    expect(parseSetupTokenPrompt(screen(url.replace("claude.ai", "claude.com")))).toBeNull();
+    expect(parseSetupTokenPrompt(screen(url + "&redirect_uri=https://example.invalid"))).toBeNull();
+    expect(parseSetupTokenPrompt(screen(url.slice(0, -1)))).toBeNull();
+    expect(parseSetupTokenPrompt(screen(url, "Other message Paste code here"))).toBeNull();
+  });
+
   it("returns the exact claude.com URL and prompt from a complete output", () => {
     const result = parseSetupTokenPrompt(completeOutput(CLAUDE_COM_URL));
     expect(result).not.toBeNull();
