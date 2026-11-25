@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { useAgentChatNavigation } from "@/hooks/useAgentChatNavigation";
 import type { MemoryPreviewSession } from "@/fixtures/conversation-memory-preview";
 import { Link, useSearchParams } from "@/lib/router";
 
@@ -20,6 +21,7 @@ export function Conversations() {
 }
 
 function ConversationHistory({ companyId }: { companyId: string }) {
+  const nativeChats = useAgentChatNavigation();
   const [query, setQuery] = useState("");
   const [platform, setPlatform] = useState("");
   const [project, setProject] = useState("");
@@ -54,18 +56,31 @@ function ConversationHistory({ companyId }: { companyId: string }) {
       task: item.task,
       source: "paperclip" as const,
     }));
+    const native = (nativeChats.chats.data ?? []).flatMap(chat => chat.conversationAgentId ? [{
+      id: chat.id,
+      title: chat.title,
+      date: String(chat.updatedAt),
+      platform: undefined,
+      model: undefined,
+      project: names.get(chat.projectId ?? ""),
+      summary: chat.description ?? "",
+      chatUrl: undefined,
+      task: undefined,
+      agentId: chat.conversationAgentId,
+      source: "native" as const,
+    }] : []);
     const samples = showMemoryPreview ? (memory.data ?? []).map((item: MemoryPreviewSession) => ({
       ...item,
       task: undefined,
       source: "memory" as const,
     })) : [];
-    return [...paperclip, ...samples].sort((a, b) => b.date.localeCompare(a.date));
-  }, [updates.data, names, memory.data, showMemoryPreview]);
+    return [...paperclip, ...native, ...samples].sort((a, b) => b.date.localeCompare(a.date));
+  }, [updates.data, names, memory.data, showMemoryPreview, nativeChats.chats.data]);
   const platforms = [...new Set(entries.flatMap(item => item.platform ? [item.platform] : []))].sort();
   const projectNames = [...new Set(entries.flatMap(item => item.project ? [item.project] : []))].sort();
   const search = query.trim().toLowerCase();
   const visible = entries.filter(item =>
-    (!showMemoryPreview || !source || item.source === source) &&
+    (!source || item.source === source) &&
     (!since || conversationCalendarDate(item.date) >= since) &&
     (!platform || item.platform === platform) &&
     (!project || item.project === project) &&
@@ -95,12 +110,13 @@ function ConversationHistory({ companyId }: { companyId: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <Input className="w-full sm:max-w-xs" value={query} onChange={event => { setQuery(event.target.value); if (selectedId) selectUpdate(); }}
           placeholder="Search conversations" aria-label="Search conversations" />
-        {showMemoryPreview && <select aria-label="Source" className="rounded-md border bg-background p-2 text-sm"
+        <select aria-label="Source" className="rounded-md border bg-background p-2 text-sm"
           value={source} onChange={event => { setSource(event.target.value); if (selectedId) selectUpdate(); }}>
           <option value="">All sources</option>
           <option value="paperclip">Paperclip</option>
-          <option value="memory">AI Memory preview</option>
-        </select>}
+          <option value="native">Native chat</option>
+          {showMemoryPreview && <option value="memory">AI Memory preview</option>}
+        </select>
         <select aria-label="AI platform" className="rounded-md border bg-background p-2 text-sm"
           value={platform} onChange={event => { setPlatform(event.target.value); if (selectedId) selectUpdate(); }}>
           <option value="">All platforms</option>
@@ -121,6 +137,10 @@ function ConversationHistory({ companyId }: { companyId: string }) {
         )}
       </div>
       {updates.isPending && <p role="status">Loading conversation updates…</p>}
+      {nativeChats.chats.isError && <div role="alert" className="flex items-center gap-2">
+        <p>Native chats could not be loaded.</p>
+        <Button variant="outline" onClick={() => void nativeChats.chats.refetch()}>Retry</Button>
+      </div>}
       {updates.isError && <div className="flex items-center gap-2" role="alert">
         <p>Conversation updates could not be loaded.</p>
         <Button variant="outline" onClick={() => void updates.refetch()}>Retry</Button>
@@ -137,7 +157,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
                 onClick={() => selectUpdate(item.id)}>
                 <span className="block truncate text-sm font-medium">{item.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {[item.source === "paperclip" ? "Paperclip" : "AI Memory preview", item.platform, item.model, item.project].filter(Boolean).join(" · ")}
+                  {[item.source === "paperclip" ? "Paperclip" : item.source === "native" ? "Native chat" : "AI Memory preview", item.platform, item.model, item.project].filter(Boolean).join(" · ")}
                 </span>
                 <time className="block text-xs text-muted-foreground" dateTime={item.date}>
                   {formatConversationDate(item.date)}
@@ -147,7 +167,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
           </ul>}
           {selected ? <article className="min-w-0 space-y-4 rounded-lg border p-4 md:col-span-2">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">{selected.source === "paperclip" ? "Paperclip · Self-reported provenance" : "AI Memory preview"}</p>
+              <p className="text-xs text-muted-foreground">{selected.source === "paperclip" ? "Paperclip · Self-reported provenance" : selected.source === "native" ? "Native agent chat" : "AI Memory preview"}</p>
               <h2 className="break-words text-lg font-semibold">{selected.title}</h2>
               <p className="break-words text-sm text-muted-foreground">
                 {[selected.platform, selected.model, selected.project].filter(Boolean).join(" · ")}
@@ -157,6 +177,9 @@ function ConversationHistory({ companyId }: { companyId: string }) {
               </time>
             </div>
             <div className="flex flex-wrap gap-2">
+              {selected.source === "native" && <Button asChild variant="outline" size="sm">
+                <Link to={`/chats/${encodeURIComponent(selected.agentId)}`}>Open chat</Link>
+              </Button>}
               {selected.task && <Button asChild variant="outline" size="sm">
                 <Link to={`/issues/${selected.task.identifier ?? selected.task.id}#comment-${selected.id}`}>
                   Open task {selected.task.identifier}

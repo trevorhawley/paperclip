@@ -13,6 +13,10 @@ vi.mock("@/context/CompanyContext", () => ({
 vi.mock("@/context/BreadcrumbContext", () => ({
   useBreadcrumbs: () => ({ setBreadcrumbs: vi.fn() }),
 }));
+const nativeFixture = vi.hoisted(() => ({ chats: [] as Array<Record<string, unknown>> }));
+vi.mock("@/hooks/useAgentChatNavigation", () => ({
+  useAgentChatNavigation: () => ({ chats: { data: nativeFixture.chats, isError: false, refetch: vi.fn() } }),
+}));
 vi.mock("@/api/client", () => ({
   api: { get: vi.fn().mockResolvedValue([{
     id: "paperclip-update", task: { id: "task", identifier: "PAP-1", title: "Recorded update", projectId: null },
@@ -39,6 +43,7 @@ async function waitForText(value: string) {
 afterEach(async () => {
   await act(async () => root?.unmount());
   client?.clear();
+  nativeFixture.chats = [];
   container.replaceChildren();
 });
 
@@ -87,6 +92,32 @@ describe("Conversations", () => {
     await waitForText("Conversation updates could not be loaded.");
     expect(container.textContent).not.toContain("No conversations available.");
     expect(container.textContent).toContain("Retry");
+  });
+
+  it("shows existing native chats without creating or sending messages", async () => {
+    nativeFixture.chats = [{
+      id: "chat-1", title: "Chat with Planner", conversationAgentId: "agent-1",
+      updatedAt: "2026-11-26T09:00:00Z", projectId: null, description: null,
+    }];
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    root = createRoot(container);
+    await act(async () => root!.render(
+      <QueryClientProvider client={client!}>
+        <MemoryRouter initialEntries={["/conversations"]}>
+          <Conversations />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ));
+    await waitForText("Recorded update");
+    expect(container.textContent).toContain("Chat with Planner");
+    expect(container.querySelector('a[href="/chats/agent-1"]')?.textContent).toContain("Open chat");
+    const source = container.querySelector<HTMLSelectElement>('select[aria-label="Source"]')!;
+    await act(async () => {
+      source.value = "native";
+      source.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).not.toContain("Recorded update");
+    expect(container.textContent).toContain("Native agent chat");
   });
 
 });
