@@ -1,0 +1,74 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Conversations } from "./Conversations";
+
+vi.mock("@/context/CompanyContext", () => ({
+  useCompany: () => ({ selectedCompanyId: "company", selectedCompany: null }),
+}));
+vi.mock("@/context/BreadcrumbContext", () => ({
+  useBreadcrumbs: () => ({ setBreadcrumbs: vi.fn() }),
+}));
+vi.mock("@/api/client", () => ({
+  api: { get: vi.fn().mockResolvedValue([{
+    id: "paperclip-update", task: { id: "task", identifier: "PAP-1", title: "Recorded update", projectId: null },
+    recordedAt: "2026-11-25T00:00:00Z", discussion: "Recorded discussion", platform: "Codex", model: null, chatUrl: null,
+  }]) },
+}));
+vi.mock("@/api/projects", () => ({ projectsApi: { list: vi.fn().mockResolvedValue([]) } }));
+vi.mock("@/components/MarkdownBody", () => ({ MarkdownBody: ({ children }: { children: string }) => <div>{children}</div> }));
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+const container = document.createElement("div");
+document.body.appendChild(container);
+let root: ReturnType<typeof createRoot> | undefined;
+let client: QueryClient | undefined;
+
+async function waitForText(value: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (container.textContent?.includes(value)) return;
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  }
+  throw new Error(`Missing text: ${value}`);
+}
+
+afterEach(async () => {
+  await act(async () => root?.unmount());
+  client?.clear();
+  container.replaceChildren();
+});
+
+describe("Conversations", () => {
+  it("filters synthetic standalone memory alongside recorded work", async () => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    root = createRoot(container);
+    await act(async () => root!.render(
+      <QueryClientProvider client={client!}>
+        <MemoryRouter initialEntries={["/conversations?preview=memory"]}>
+          <Conversations />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ));
+    await waitForText("Planning a community garden");
+    expect(container.textContent).toContain("Recorded update");
+    const source = container.querySelector<HTMLSelectElement>('select[aria-label="Source"]')!;
+    await act(async () => {
+      source.value = "memory";
+      source.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).not.toContain("Recorded update");
+    expect(container.textContent).toContain("Decisions");
+    expect(container.textContent).toContain("Action items");
+    expect(container.textContent).not.toContain("Open task");
+    const date = container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    await act(async () => {
+      date.value = "2026-11-24";
+      date.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Planning a community garden");
+    expect(container.textContent).not.toContain("Notes on learning SQL");
+  });
+});
