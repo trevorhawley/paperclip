@@ -13,9 +13,9 @@ vi.mock("@/context/CompanyContext", () => ({
 vi.mock("@/context/BreadcrumbContext", () => ({
   useBreadcrumbs: () => ({ setBreadcrumbs: vi.fn() }),
 }));
-const nativeFixture = vi.hoisted(() => ({ chats: [] as Array<Record<string, unknown>> }));
+const nativeFixture = vi.hoisted(() => ({ chats: [] as Array<Record<string, unknown>>, userId: null as string | null }));
 vi.mock("@/hooks/useAgentChatNavigation", () => ({
-  useAgentChatNavigation: () => ({ chats: { data: nativeFixture.chats, isError: false, refetch: vi.fn() } }),
+  useAgentChatNavigation: () => ({ userId: nativeFixture.userId, chats: { data: nativeFixture.chats, isError: false, refetch: vi.fn() } }),
 }));
 vi.mock("@/api/client", () => ({
   api: { get: vi.fn().mockResolvedValue([{
@@ -44,6 +44,7 @@ afterEach(async () => {
   await act(async () => root?.unmount());
   client?.clear();
   nativeFixture.chats = [];
+  nativeFixture.userId = null;
   container.replaceChildren();
 });
 
@@ -118,6 +119,42 @@ describe("Conversations", () => {
     });
     expect(container.textContent).not.toContain("Recorded update");
     expect(container.textContent).toContain("Native agent chat");
+  });
+
+  it("shows externally retrieved sessions while preserving native and Paperclip records", async () => {
+    nativeFixture.userId = "owner";
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (String(path).includes("/trevor-memory")) return {
+        sessions: [{
+          id: "e89be275-6381-422e-bd7c-383819a9d541", title: "External research",
+          session_date: "2026-11-26", source: "ChatGPT", project: null,
+          summary: "Research summary", decisions: ["Decision"], action_items: [],
+          open_questions: [], chat_url: null,
+        }],
+      } as never;
+      return [{
+        id: "paperclip-update", task: { id: "task", identifier: "PAP-1", title: "Recorded update", projectId: null },
+        recordedAt: "2026-11-25T00:00:00Z", discussion: "Recorded discussion", platform: "Codex",
+      }] as never;
+    });
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    root = createRoot(container);
+    await act(async () => root!.render(
+      <QueryClientProvider client={client!}>
+        <MemoryRouter initialEntries={["/conversations"]}>
+          <Conversations />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ));
+    await waitForText("External research");
+    expect(container.textContent).toContain("Research summary");
+    expect(container.textContent).toContain("Decision");
+    expect(container.textContent).toContain("Recorded update");
+    expect(container.querySelector('option[value="memory"]')?.textContent).toBe("AI Memory");
+    vi.mocked(api.get).mockReset().mockResolvedValue([{
+      id: "paperclip-update", task: { id: "task", identifier: "PAP-1", title: "Recorded update", projectId: null },
+      recordedAt: "2026-11-25T00:00:00Z", discussion: "Recorded discussion", platform: "Codex", model: null, chatUrl: null,
+    }] as never);
   });
 
 });

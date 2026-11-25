@@ -13,6 +13,19 @@ import { useAgentChatNavigation } from "@/hooks/useAgentChatNavigation";
 import type { MemoryPreviewSession } from "@/fixtures/conversation-memory-preview";
 import { Link, useSearchParams } from "@/lib/router";
 
+interface MemorySession {
+  id: string;
+  title: string | null;
+  session_date: string | null;
+  source: string | null;
+  project: string | null;
+  summary: string | null;
+  decisions: string[] | null;
+  action_items: string[] | null;
+  open_questions: string[] | null;
+  chat_url: string | null;
+}
+
 export function Conversations() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -23,6 +36,11 @@ export function Conversations() {
 function ConversationHistory({ companyId }: { companyId: string }) {
   const nativeChats = useAgentChatNavigation();
   const [query, setQuery] = useState("");
+  const [memoryQuery, setMemoryQuery] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMemoryQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
   const [platform, setPlatform] = useState("");
   const [project, setProject] = useState("");
   const [since, setSince] = useState("");
@@ -33,6 +51,25 @@ function ConversationHistory({ companyId }: { companyId: string }) {
     queryKey: ["synthetic-conversation-memory"],
     queryFn: async () => (await import("@/fixtures/conversation-memory-preview")).memoryPreviewSessions,
     enabled: showMemoryPreview,
+  });
+  const externalMemory = useQuery({
+    queryKey: ["trevor-memory", companyId, nativeChats.userId, memoryQuery],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (memoryQuery) params.set("query", memoryQuery);
+      try {
+        return await api.get<{ sessions: MemorySession[] }>(
+          `/companies/${companyId}/trevor-memory${params.size ? `?${params}` : ""}`,
+          { cache: "no-store" },
+        );
+      } catch (error) {
+        if (typeof error === "object" && error !== null && "status" in error &&
+          (error.status === 403 || error.status === 404)) return null;
+        throw error;
+      }
+    },
+    enabled: !showMemoryPreview && !!nativeChats.userId,
+    retry: false,
   });
   const updates = useQuery({
     queryKey: ["external-conversation-updates", companyId],
@@ -69,13 +106,28 @@ function ConversationHistory({ companyId }: { companyId: string }) {
       agentId: chat.conversationAgentId,
       source: "native" as const,
     }] : []);
+    const external = (externalMemory.data?.sessions ?? []).map(item => ({
+      id: item.id,
+      title: item.title || "Untitled conversation",
+      date: item.session_date ?? "",
+      platform: item.source ?? undefined,
+      model: undefined,
+      project: item.project ?? undefined,
+      summary: item.summary ?? "",
+      decisions: item.decisions ?? undefined,
+      actionItems: item.action_items ?? undefined,
+      openQuestions: item.open_questions ?? undefined,
+      chatUrl: item.chat_url ?? undefined,
+      task: undefined,
+      source: "memory" as const,
+    }));
     const samples = showMemoryPreview ? (memory.data ?? []).map((item: MemoryPreviewSession) => ({
       ...item,
       task: undefined,
       source: "memory" as const,
     })) : [];
-    return [...paperclip, ...native, ...samples].sort((a, b) => b.date.localeCompare(a.date));
-  }, [updates.data, names, memory.data, showMemoryPreview, nativeChats.chats.data]);
+    return [...paperclip, ...native, ...external, ...samples].sort((a, b) => b.date.localeCompare(a.date));
+  }, [updates.data, names, memory.data, showMemoryPreview, nativeChats.chats.data, externalMemory.data]);
   const platforms = [...new Set(entries.flatMap(item => item.platform ? [item.platform] : []))].sort();
   const projectNames = [...new Set(entries.flatMap(item => item.project ? [item.project] : []))].sort();
   const search = query.trim().toLowerCase();
@@ -84,7 +136,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
     (!since || conversationCalendarDate(item.date) >= since) &&
     (!platform || item.platform === platform) &&
     (!project || item.project === project) &&
-    (!search || [item.title, item.task?.identifier, item.platform, item.model,
+    (!search || (!showMemoryPreview && item.source === "memory") || [item.title, item.task?.identifier, item.platform, item.model,
       item.summary, item.chatUrl, item.project,
       ...(item.source === "memory" ? [...(item.decisions ?? []), ...(item.actionItems ?? []), ...(item.openQuestions ?? [])] : [])]
       .some(value => value?.toLowerCase().includes(search))),
@@ -115,7 +167,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
           <option value="">All sources</option>
           <option value="paperclip">Paperclip</option>
           <option value="native">Native chat</option>
-          {showMemoryPreview && <option value="memory">AI Memory preview</option>}
+          {(showMemoryPreview || externalMemory.data) && <option value="memory">{showMemoryPreview ? "AI Memory preview" : "AI Memory"}</option>}
         </select>
         <select aria-label="AI platform" className="rounded-md border bg-background p-2 text-sm"
           value={platform} onChange={event => { setPlatform(event.target.value); if (selectedId) selectUpdate(); }}>
@@ -136,6 +188,10 @@ function ConversationHistory({ companyId }: { companyId: string }) {
           <p className="text-sm text-muted-foreground">Searching the latest 100 Paperclip updates.</p>
         )}
       </div>
+      {externalMemory.isError && <div role="alert" className="flex items-center gap-2">
+        <p>AI Memory could not be loaded.</p>
+        <Button variant="outline" onClick={() => void externalMemory.refetch()}>Retry</Button>
+      </div>}
       {updates.isPending && <p role="status">Loading conversation updates…</p>}
       {nativeChats.chats.isError && <div role="alert" className="flex items-center gap-2">
         <p>Native chats could not be loaded.</p>
@@ -157,24 +213,24 @@ function ConversationHistory({ companyId }: { companyId: string }) {
                 onClick={() => selectUpdate(item.id)}>
                 <span className="block truncate text-sm font-medium">{item.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {[item.source === "paperclip" ? "Paperclip" : item.source === "native" ? "Native chat" : "AI Memory preview", item.platform, item.model, item.project].filter(Boolean).join(" · ")}
+                  {[item.source === "paperclip" ? "Paperclip" : item.source === "native" ? "Native chat" : showMemoryPreview ? "AI Memory preview" : "AI Memory", item.platform, item.model, item.project].filter(Boolean).join(" · ")}
                 </span>
-                <time className="block text-xs text-muted-foreground" dateTime={item.date}>
+                {item.date && <time className="block text-xs text-muted-foreground" dateTime={item.date}>
                   {formatConversationDate(item.date)}
-                </time>
+                </time>}
               </button>
             </li>)}
           </ul>}
           {selected ? <article className="min-w-0 space-y-4 rounded-lg border p-4 md:col-span-2">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">{selected.source === "paperclip" ? "Paperclip · Self-reported provenance" : selected.source === "native" ? "Native agent chat" : "AI Memory preview"}</p>
+              <p className="text-xs text-muted-foreground">{selected.source === "paperclip" ? "Paperclip · Self-reported provenance" : selected.source === "native" ? "Native agent chat" : showMemoryPreview ? "AI Memory preview" : "AI Memory"}</p>
               <h2 className="break-words text-lg font-semibold">{selected.title}</h2>
               <p className="break-words text-sm text-muted-foreground">
                 {[selected.platform, selected.model, selected.project].filter(Boolean).join(" · ")}
               </p>
-              <time className="block text-xs text-muted-foreground" dateTime={selected.date}>
+              {selected.date && <time className="block text-xs text-muted-foreground" dateTime={selected.date}>
                 {formatConversationDate(selected.date)}
-              </time>
+              </time>}
             </div>
             <div className="flex flex-wrap gap-2">
               {selected.source === "native" && <Button asChild variant="outline" size="sm">
