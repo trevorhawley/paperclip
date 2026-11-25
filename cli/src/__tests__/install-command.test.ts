@@ -124,11 +124,13 @@ describe("managed install commands", () => {
         const packages = [
           { dir: "packages/shared", name: "@paperclipai/shared", packageJson: { name: "@paperclipai/shared", version: "0.3.1" } },
           { dir: "packages/db", name: "@paperclipai/db", packageJson: { name: "@paperclipai/db", version: "0.3.1", dependencies: { "@paperclipai/shared": "workspace:*" }, bundleDependencies: ["embedded-postgres"] } },
-          { dir: "server", name: "@paperclipai/server", packageJson: { name: "@paperclipai/server", version: "0.3.1", dependencies: { "@paperclipai/db": "workspace:*" }, bundleDependencies: bundleServer ? ["paperclip-runner"] : [] } },
+          { dir: "server", name: "@paperclipai/server", packageJson: { name: "@paperclipai/server", version: "0.3.1", dependencies: { "@paperclipai/db": "workspace:*" }, bundleDependencies: bundleServer ? ["paperclip-runner"] : [], files: bundleServer ? ["ui-dist", "skills"] : [] } },
         ];
         fs.mkdirSync(path.join(checkout, "cli"), { recursive: true });
         fs.writeFileSync(path.join(checkout, "cli", "package.json"), JSON.stringify({ version: "0.3.1" }));
         fs.mkdirSync(path.join(checkout, "scripts"), { recursive: true });
+        fs.mkdirSync(path.join(checkout, "skills"));
+        fs.writeFileSync(path.join(checkout, "skills", "example.md"), "Example skill");
         fs.writeFileSync(path.join(checkout, "scripts", "release-package-manifest.json"), JSON.stringify(packages.map(({ dir, name }) => ({ dir, name }))));
         for (const workspacePackage of packages) {
           fs.mkdirSync(path.join(checkout, workspacePackage.dir), { recursive: true });
@@ -165,6 +167,7 @@ describe("managed install commands", () => {
       if (file === process.execPath && args[0]?.endsWith("prepare-bundled-package.mjs")) {
         if (path.basename(args[1]) === "server") {
           expect(fs.existsSync(path.join(args[1], "ui-dist", "index.html"))).toBe(true);
+          expect(fs.readFileSync(path.join(args[1], "skills", "example.md"), "utf8")).toBe("Example skill");
         }
         fs.mkdirSync(args[2], { recursive: true });
         fs.copyFileSync(path.join(args[1], "package.json"), path.join(args[2], "package.json"));
@@ -211,7 +214,7 @@ describe("managed install commands", () => {
     expect(uiPackCall).toBeDefined();
   });
 
-  it("stages the UI before packing a bundled server from Git", async () => {
+  it("stages the UI and skills before packing a bundled server from Git", async () => {
     const sha = "e".repeat(40);
     const runCommand = createGitCheckoutRunCommand(sha, true);
     await expect(installGitPayload("paperclipai/paperclip", sha, runCommand, resolveInstallStorePaths()))
