@@ -60,6 +60,9 @@ describe("heartbeat task markdown rendering", () => {
     expect(optedIn).toContain('interactionKind: "suggest_tasks"');
     expect(optedIn).toContain("acceptance creates the task atomically");
     expect(optedIn).toContain("If the user explicitly authorized task creation, use create_task directly");
+    expect(optedIn).toContain("Coordinator reply style:");
+    expect(optedIn).toContain("Lead with the outcome");
+    expect(classic).not.toContain("Coordinator reply style:");
     expect(buildPaperclipTaskMarkdown({ issue, nativeRunner: false, coordinatorWorkspace: true }))
       .not.toContain("Coordinator task proposals:");
   });
