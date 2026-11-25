@@ -183,14 +183,14 @@ const PROMPT_LINE_RE = /^Paste code here if prompted\b[\s>*]*$/;
 
 // Claude Code 2.1.330 can issue an opaque browser handle on the existing
 // claude.ai authorization endpoint instead of exposing the PKCE query fields.
-const SHORT_AUTHORIZATION_URL_RE = /^https:\/\/claude\.ai\/oauth\/authorize\?[A-Za-z0-9_-]{43}$/;
+const SHORT_AUTHORIZATION_URL_RE = /^https:\/\/claude\.ai\/oauth\/authorize\?[A-Za-z0-9_-]{44}$/;
 const SHORT_PROMPT_LINE_RE = /^Paste code here\b[\s>*]*$/;
 const WRAPPED_COPY_HINT_START_RE = /^Hold\s+Shift(?:\s+\(Option in iTerm2, Fn in Terminal\.app\))?\s+while\s+selecting\s+to\s+use\s+your$/i;
 const WRAPPED_COPY_HINT_END_RE = /^terminal['’]s\s+native\s+copy\.?$/i;
 
 // The copy hint that `claude` 2.1.291 prints between the URL block and the
 // prompt. The parser skips this exact line and binds no value from it.
-const COPY_HINT_LINE_RE = /^Hold\s+Shift\s+while\s+selecting\s+to\s+use\s+your\s+terminal['’]s\s+native\s+copy\.?$/i;
+const COPY_HINT_LINE_RE = /^Hold\s+Shift(?:\s+\(Option in iTerm2, Fn in Terminal\.app\))?\s+while\s+selecting\s+to\s+use\s+your\s+terminal['’]s\s+native\s+copy\.?$/i;
 
 // The maximum number of characters between the end of the URL preamble line and
 // the start of the URL. The Claude UI prints the URL right after the preamble.

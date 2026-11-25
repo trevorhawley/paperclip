@@ -96,7 +96,7 @@ function hardWrap(text: string, width: number): string {
 
 describe("parseSetupTokenPrompt", () => {
   it("accepts the 2.1.330 short Claude URL with its wrapped copy hint", () => {
-    const url = `https://claude.ai/oauth/authorize?${"a".repeat(43)}`;
+    const url = `https://claude.ai/oauth/authorize?${"a".repeat(44)}`;
     const screen = (candidate: string, prompt = "Paste code here >") => [
       "Use the URL below to sign in (c to copy)",
       candidate,
