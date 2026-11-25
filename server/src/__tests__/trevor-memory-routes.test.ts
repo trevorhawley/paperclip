@@ -24,12 +24,14 @@ const owner = { type: "board", source: "session", userId: ownerId, companyIds: [
 const path = `/api/companies/${companyId}/trevor-memory`;
 
 beforeEach(() => {
+  process.env.PAPERCLIP_MEMORY_URL = "https://synthetic-project.supabase.co/functions/v1/paperclip-memory-read";
   process.env.PAPERCLIP_MEMORY_COMPANY_ID = companyId;
   process.env.PAPERCLIP_MEMORY_OWNER_ID = ownerId;
   process.env.PAPERCLIP_MEMORY_READ_TOKEN = "synthetic-test-credential";
   membership.mockResolvedValue([{ id: "membership" }]);
 });
 afterEach(() => {
+  delete process.env.PAPERCLIP_MEMORY_URL;
   delete process.env.PAPERCLIP_MEMORY_COMPANY_ID;
   delete process.env.PAPERCLIP_MEMORY_OWNER_ID;
   delete process.env.PAPERCLIP_MEMORY_READ_TOKEN;
@@ -47,6 +49,8 @@ describe("Trevor Memory read access", () => {
     membership.mockResolvedValue([]);
     expect((await request(appFor(owner)).get(path)).status).toBe(403);
     expect((await request(appFor(owner)).get("/api/companies/2748b3c0-44d7-4b29-b58e-a1548791fa77/trevor-memory")).status).toBe(404);
+    process.env.PAPERCLIP_MEMORY_URL = "http://127.0.0.1/functions/v1/paperclip-memory-read";
+    expect((await request(appFor(owner)).get(path)).status).toBe(404);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -63,7 +67,7 @@ describe("Trevor Memory read access", () => {
     expect(result.body.sessions).toEqual([record]);
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, options] = fetchSpy.mock.calls[0]!;
-    expect(url).toBe("https://hvhictpiwbmkfblbmird.supabase.co/functions/v1/paperclip-memory-read");
+    expect(url).toBe("https://synthetic-project.supabase.co/functions/v1/paperclip-memory-read");
     expect(options?.redirect).toBe("error");
     expect(JSON.parse(String(options?.body))).toEqual({ query: "synthetic", limit: 25 });
   });

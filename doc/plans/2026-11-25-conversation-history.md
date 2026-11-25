@@ -105,3 +105,23 @@ The current Memory search endpoint needs a query and returns at most 25
 results. Recent browsing requires an additional bounded read capability.
 The production Memory project and its permissions require separate review
 before any changes. DEV validation must use synthetic data.
+
+## Scoped retrieval implementation
+
+The local Paperclip feature branch has a disabled-by-default board read route.
+Configuration requires a Supabase function URL, company ID, authenticated owner
+ID and dedicated read token in the server environment. The URL is restricted to
+HTTPS Supabase function hosts, redirects are rejected, and responses are bounded.
+Each request checks the current session and active owner membership. Provider
+failure leaves Paperclip's own data available.
+
+The separate th-ai-core feature branch has a dedicated read function and SQL
+functions. The dedicated token is checked against its Vault hash. The SQL read
+returns at most 25 records, supports recent history, keyword search and UUID
+lookup, and grants execution only to the service role. This is a keyword
+retrieval path. The existing Memory hybrid search remains separate.
+
+The function and migration are local development artifacts. They have not been
+deployed to Trevor AI Memory. No token has been provisioned. Synthetic isolated
+PostgreSQL and function tests passed; a complete isolated Supabase runtime and
+live security review remain outstanding. Task associations remain to be built.

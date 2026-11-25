@@ -5,7 +5,18 @@ import { z } from "zod";
 import { badRequest, forbidden, HttpError, notFound } from "../errors.js";
 import { assertCompanyAccess } from "./authz.js";
 
-const endpoint = "https://hvhictpiwbmkfblbmird.supabase.co/functions/v1/paperclip-memory-read";
+function memoryEndpoint(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !/^[a-z0-9-]+\.supabase\.co$/.test(url.hostname) ||
+      url.port || url.username || url.password || url.search || url.hash ||
+      url.pathname !== "/functions/v1/paperclip-memory-read") return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
 const querySchema = z.object({
   query: z.string().trim().max(500).optional(),
   id: z.string().uuid().optional(),
@@ -32,7 +43,8 @@ export function trevorMemoryRoutes(db: Db) {
     const configuredCompany = process.env.PAPERCLIP_MEMORY_COMPANY_ID;
     const configuredUser = process.env.PAPERCLIP_MEMORY_OWNER_ID;
     const credential = process.env.PAPERCLIP_MEMORY_READ_TOKEN;
-    if (!configuredCompany || !configuredUser || !credential || companyId !== configuredCompany) {
+    const endpoint = memoryEndpoint(process.env.PAPERCLIP_MEMORY_URL);
+    if (!configuredCompany || !configuredUser || !credential || !endpoint || companyId !== configuredCompany) {
       throw notFound("Memory provider unavailable");
     }
     if (req.actor.type !== "board" || req.actor.source !== "session" || req.actor.userId !== configuredUser) {
