@@ -75,3 +75,33 @@ issue UUID with a unique constraint for that combination. A project may be
 attached by its ID independently. Resolve these references through existing
 Paperclip authorization. Read and link operations should never create tasks
 or request execution. The synthetic preview adds no persistent associations.
+
+## Local-first direction
+
+Trevor selected a hybrid architecture on 2026-11-25. Paperclip's own
+conversation and execution records remain available independently of external
+history. Trevor AI Memory is an optional external retrieval provider. Do not
+introduce synchronization or a cache without measuring the actual need.
+
+The existing memory connectors are company-scoped tool connections. They use
+the connection vault, grants and gateway, and agents invoke provider tools
+explicitly. They do not currently provide a board conversation library or
+automatically import conversations. Personal grants and provider ACLs are
+important: a company selector alone is not a security boundary for a personal
+memory database. The old memory service surface document is a proposal, not
+evidence that a general memory API is implemented.
+
+Native agent chat is an existing task-backed conversation with persistent
+visible history. Agent files are durable per-agent directories restored for
+execution and collected at turn boundaries. They are agent-owned context,
+and simultaneous changes to the same file use the last completed save. They
+are not a project-wide shared knowledge base. Existing project documents and
+task relationships should be evaluated before introducing project context
+storage.
+
+Next, investigate whether an existing personal connection grant and gateway
+can provide the owner-only, read-only Memory operations needed by the board.
+The current Memory search endpoint needs a query and returns at most 25
+results. Recent browsing requires an additional bounded read capability.
+The production Memory project and its permissions require separate review
+before any changes. DEV validation must use synthetic data.
