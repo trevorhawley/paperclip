@@ -7,6 +7,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   "org",
   "agents",
   "chats",
+  "conversations",
   "apps",
   "projects",
   "workspaces",

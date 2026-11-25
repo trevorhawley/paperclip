@@ -177,6 +177,7 @@ function ClassicSidebar({ children }: { children?: ReactNode }) {
               width; a nav row also keeps search reachable from the
               collapsed rail, where the old header icon was dropped entirely.
               Cmd/Ctrl+K remains the keyboard path (command palette). */}
+          <SidebarNavItem to="/conversations" label="Conversations" icon={History} />
           <SidebarNavItem to="/search" label="Search" icon={Search} />
           <SidebarNavItem to="/dashboard" label="Dashboard" icon={LayoutDashboard} liveCount={liveRunCount} />
           {!combinedInboxTasks ? (

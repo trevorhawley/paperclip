@@ -19260,6 +19260,59 @@ export function issueRoutes(
     res.json(bundle);
   });
 
+  router.get("/companies/:companyId/external-conversation-updates", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    if (req.actor.type !== "board" || !req.actor.userId || req.actor.source === "mcp_oauth") {
+      throw forbidden("Board user access required");
+    }
+    const rows = await db
+      .select({ issue: issueRows, comment: issueComments })
+      .from(activityLog)
+      .innerJoin(issueRows, and(
+        eq(issueRows.companyId, companyId),
+        sql`${issueRows.id}::text = ${activityLog.entityId}`,
+      ))
+      .innerJoin(issueComments, and(
+        eq(issueComments.companyId, companyId),
+        eq(issueComments.issueId, issueRows.id),
+        sql`${issueComments.id}::text = ${activityLog.details}->>'commentId'`,
+      ))
+      .where(and(
+        eq(activityLog.companyId, companyId),
+        eq(activityLog.entityType, "issue"),
+        eq(activityLog.action, "issue.comment_added"),
+        sql`${activityLog.details}->>'source' = 'external_ai_passive'`,
+        isNull(issueComments.deletedAt),
+      ))
+      .orderBy(desc(activityLog.createdAt), desc(activityLog.id))
+      .limit(100);
+
+    const issues = [...new Map(rows.map(({ issue }) => [issue.id, issue])).values()];
+    const visibleIds = new Set((await filterIssuesForActor(req, issues)).map(issue => issue.id));
+    const updates = rows.flatMap(({ issue, comment }): import("@paperclipai/shared").ExternalConversationUpdate[] => {
+      if (!visibleIds.has(issue.id)) return [];
+      const section = comment.metadata?.sections.find(
+        item => item.title === "External AI provenance (self-reported)",
+      );
+      const provenance = new Map(section?.rows.flatMap(row =>
+        row.type === "key_value" ? [[row.label, row.value] as const] : [],
+      ));
+      const chatUrl = provenance.get("Chat URL");
+      return [{
+        id: comment.id,
+        task: { id: issue.id, identifier: issue.identifier, title: issue.title, projectId: issue.projectId },
+        recordedByUserId: comment.authorUserId,
+        recordedAt: comment.createdAt.toISOString(),
+        discussion: comment.body,
+        platform: provenance.get("Platform") ?? null,
+        model: provenance.get("Model") ?? null,
+        chatUrl: chatUrl && /^https?:\/\//.test(chatUrl) ? chatUrl : null,
+      }];
+    });
+    res.json(updates);
+  });
+
   router.get("/companies/:companyId/chats", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
