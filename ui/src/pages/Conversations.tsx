@@ -187,6 +187,9 @@ function ConversationHistory({ companyId }: { companyId: string }) {
         {updates.isSuccess && updates.data.length >= 100 && (
           <p className="text-sm text-muted-foreground">Searching the latest 100 Paperclip updates.</p>
         )}
+        {externalMemory.data && externalMemory.data.sessions.length >= 25 && (
+          <p className="text-sm text-muted-foreground">Showing up to 25 AI Memory results. Search to find more.</p>
+        )}
       </div>
       {externalMemory.isError && <div role="alert" className="flex items-center gap-2">
         <p>AI Memory could not be loaded.</p>
