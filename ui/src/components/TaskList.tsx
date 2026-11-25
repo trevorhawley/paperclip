@@ -27,6 +27,8 @@ export type TaskListItem = {
   assignee?: string | null;
   assigneeAgent?: AvatarAgent | null;
   assigneeUserAvatarUrl?: string | null;
+  /** Where the work came from (e.g. ChatGPT) and the latest note that AI left on it. */
+  source?: { platform: string; note?: string } | null;
 };
 
 export type TaskListGrouping = "none" | "status" | "project";
@@ -107,6 +109,7 @@ export function TaskList({ items, allItems = items, initialColumns = defaultTask
         <IssueRow
           issue={issue} presentation="task" appearance="refreshed" density={density} issueLinkState={issueLinkState}
           unreadState={item.unread ? "visible" : "hidden"}
+          titleAside={item.source ? <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-normal text-muted-foreground"><Badge variant="secondary" className="shrink-0 px-1.5 py-0">{item.source.platform}</Badge>{item.source.note ? <span className="truncate">{item.source.note}</span> : null}</span> : undefined}
           treeGuides={depth} chevronInGuide={depth > 0 && children.length > 0}
           leadingControl={children.length ? (
             <Button variant="ghost" size="icon-xs" className="task-row-disclosure" aria-label={`${expanded ? "Collapse" : "Expand"} ${issue.title}`} aria-expanded={expanded} onClick={() => {

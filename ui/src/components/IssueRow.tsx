@@ -71,6 +71,8 @@ export interface IssueRowProps {
   externalObjectSummary?: ExternalObjectSummary | null;
   trailingMeta?: ReactNode;
   titleSuffix?: ReactNode;
+  /** Secondary context shown beside the title, truncated before the title is. */
+  titleAside?: ReactNode;
   titleClassName?: string;
   checklistStepNumber?: number | string | null;
   checklistCurrentStep?: boolean;
@@ -155,6 +157,7 @@ export function IssueRow({
   externalObjectSummary,
   trailingMeta,
   titleSuffix,
+  titleAside,
   titleClassName,
   checklistStepNumber = null,
   checklistCurrentStep = false,
@@ -381,6 +384,7 @@ export function IssueRow({
               >
                 {issue.title}{titleSuffix}
               </span>}
+              {titleAside ? <span data-slot="task-row-title-aside" className="hidden min-w-0 max-w-[55%] shrink-[2] items-center sm:flex">{titleAside}</span> : null}
               {stableLayout && recoveryIndicator ? (
                 <span data-slot="task-row-recovery">
                   <span className="hidden sm:inline">{recoveryIndicator}</span>
