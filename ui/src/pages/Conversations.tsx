@@ -23,6 +23,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
   const [query, setQuery] = useState("");
   const [platform, setPlatform] = useState("");
   const [project, setProject] = useState("");
+  const [since, setSince] = useState("");
   const [params, setParams] = useSearchParams();
   const [source, setSource] = useState("");
   const showMemoryPreview = import.meta.env.DEV && params.get("preview") === "memory";
@@ -64,7 +65,8 @@ function ConversationHistory({ companyId }: { companyId: string }) {
   const projectNames = [...new Set(entries.flatMap(item => item.project ? [item.project] : []))].sort();
   const search = query.trim().toLowerCase();
   const visible = entries.filter(item =>
-    (!source || item.source === source) &&
+    (!showMemoryPreview || !source || item.source === source) &&
+    (!since || conversationCalendarDate(item.date) >= since) &&
     (!platform || item.platform === platform) &&
     (!project || item.project === project) &&
     (!search || [item.title, item.task?.identifier, item.platform, item.model,
@@ -109,6 +111,11 @@ function ConversationHistory({ companyId }: { companyId: string }) {
           <option value="">All projects</option>
           {projectNames.map(name => <option key={name}>{name}</option>)}
         </select>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          From date
+          <Input type="date" value={since}
+            onInput={event => { setSince(event.currentTarget.value); if (selectedId) selectUpdate(); }} />
+        </label>
       </div>
       {updates.isPending && <p role="status">Loading conversation updates…</p>}
       {updates.isError && <div className="flex items-center gap-2" role="alert">
@@ -181,4 +188,13 @@ function ConversationNotes({ title, items }: { title: string; items?: string[] }
 function formatConversationDate(value: string) {
   const date = new Date(value);
   return value.length === 10 ? date.toLocaleDateString(undefined, { timeZone: "UTC" }) : date.toLocaleString();
+}
+
+function conversationCalendarDate(value: string) {
+  if (value.length === 10) return value;
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
