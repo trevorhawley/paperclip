@@ -66,3 +66,7 @@ Use a disposable workspace to verify the toolchain before resuming development.
 Use `pnpm verify --base origin/dev` for affected local tests after preflight; see AGENTS.md for exit code 2 and wider checks. Run focused tests for changed behavior. The fork PR workflow is intended to exercise the upstream policy checks, typecheck, build and Vitest suite on GitHub-hosted Linux with read-only token permissions and no production secrets. No live provider, deployment, or browser acceptance is implied by these checks. Record the tested SHA and actual job results in the PR. A pending, skipped, or unavailable check is not a pass.
 
 Do not publish private instance details, real task data, connector configuration, chat links, tokens, or personal information in source, PRs, CI output or test fixtures. Use synthetic fixtures. Production deployment and data migrations require separate operator approval, a backup, and an explicit rollback plan.
+
+## UI density
+
+All fork UI work follows [FORK-UI-DENSITY.md](FORK-UI-DENSITY.md): compact rows, small actions, tight spacing, Claude-app feel.
