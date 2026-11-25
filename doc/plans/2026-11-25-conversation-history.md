@@ -2,7 +2,7 @@
 
 P2-01 starts with a private, read-only Conversations page backed by existing
 Paperclip external AI updates. The base is custom dev commit `450cf22a7`.
-Preview at [Paperclip DEV](http://127.0.0.1:4310/PAP/conversations) after signing in.
+The first increment is available in the DEV workspace after signing in.
 
 ## Existing sources
 
@@ -30,7 +30,7 @@ original chat when an HTTP(S) URL exists and to the exact task comment.
 The page searches up to 100 recent candidates. The existing issue read policy
 filters results and the endpoint accepts authenticated board requests.
 The view performs reads only and requires no migration or new dependency.
-The DEV database contains existing examples on PAP-2 and PAP-3.
+The DEV database contains examples of these updates.
 
 ## Review point
 
@@ -122,6 +122,13 @@ lookup, and grants execution only to the service role. This is a keyword
 retrieval path. The existing Memory hybrid search remains separate.
 
 The function and migration are local development artifacts. They have not been
-deployed to Trevor AI Memory. No token has been provisioned. Synthetic isolated
-PostgreSQL and function tests passed; a complete isolated Supabase runtime and
-live security review remain outstanding. Task associations remain to be built.
+deployed to Trevor AI Memory. No production token has been provisioned. Tests
+cover the local Supabase function, PostgreSQL, and Paperclip read route with
+synthetic records; the authenticated browser preview uses synthetic fixtures.
+
+Manual conversation–task associations use a small Paperclip reference table.
+Each association is scoped to the current user and company and resolves through
+existing task and conversation access checks. One conversation can reference
+multiple tasks and one task can reference multiple conversations. Adding or
+removing a reference does not create tasks or invoke agents. The DEV preview
+has been checked for linking, persistence across reload, and unlinking.
