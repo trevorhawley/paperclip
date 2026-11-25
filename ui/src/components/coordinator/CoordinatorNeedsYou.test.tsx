@@ -65,6 +65,14 @@ function completedTask(id: string, title: string, status = "done", companyId = "
 
 describe("Coordinator Needs You", () => {
   it("loads bounded completed work on demand, preserves activity order and pending filters, and links tasks", async () => {
+    // Motion receipts are tracked by event identity for the whole UI session.
+    // Use distinct decision identities so this test cannot consume another test’s animation.
+    fixture.pending = fixture.pending.map((item, index) => ({
+      ...item,
+      id: String(101 + index),
+      subject: { ...item.subject, id: String(101 + index), metadata: { issueId: `task-${101 + index}` } },
+      relatedIssue: { ...item.relatedIssue!, id: `task-${101 + index}`, identifier: `PAP-${101 + index}`, title: `Task ${101 + index}`, href: `/PAP/issues/PAP-${101 + index}` },
+    }));
     fixture.completedList.mockResolvedValue([
       completedTask("20", "Older completion", "done", "company", new Date("2026-11-19T12:00:00Z")),
       completedTask("21", "Newer completion", "done", "company", new Date("2026-11-20T12:00:00Z")),
@@ -93,8 +101,8 @@ describe("Coordinator Needs You", () => {
     await click("Pending decisions");
     expect(container.querySelector<HTMLSelectElement>('select[aria-label="Sort decisions"]')?.value).toBe("oldest");
     expect(container.querySelectorAll("article")).toHaveLength(3);
-    await click("Resolve 1");
-    expect(container.querySelector('[data-issue-id="task-1"]')).toBeNull();
+    await click("Resolve 101");
+    expect(container.querySelector('[data-issue-id="task-101"]')).toBeNull();
     client.clear();
   });
 
