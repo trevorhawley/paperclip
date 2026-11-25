@@ -31,6 +31,12 @@ import { systemdServiceName } from "../services/service-manager.js";
 const ORIGINAL_ENV = { ...process.env };
 
 describe("managed install commands", () => {
+  // Never let uninstall reach the host's real launchd/systemd from a test.
+  const noServiceManager = {
+    detectServiceManager: vi.fn(async () => ({ supported: false as const, reason: "test: no service manager" })),
+    platform: "darwin" as NodeJS.Platform,
+  };
+
   let root: string;
 
   beforeEach(() => {
@@ -368,7 +374,7 @@ describe("managed install commands", () => {
     fs.mkdirSync(paths.cliRoot, { recursive: true });
     fs.writeFileSync(unrelatedFile, "keep");
 
-    await expect(uninstallCommand()).rejects.toThrow("unverified install store");
+    await expect(uninstallCommand(noServiceManager)).rejects.toThrow("unverified install store");
     expect(fs.readFileSync(unrelatedFile, "utf8")).toBe("keep");
   });
 
@@ -390,7 +396,7 @@ describe("managed install commands", () => {
 
     await withInstallStoreLock(
       async () => {
-        await expect(uninstallCommand()).rejects.toThrow("already running");
+        await expect(uninstallCommand(noServiceManager)).rejects.toThrow("already running");
       },
       paths,
     );

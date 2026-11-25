@@ -41,7 +41,24 @@ export interface ServiceManager {
 export type CommandResult = { stdout: string; stderr: string };
 export type CommandRunner = (command: string, args: string[], options?: { inherit?: boolean }) => Promise<CommandResult>;
 
+const SERVICE_MANAGER_COMMANDS = new Set(["launchctl", "systemctl", "loginctl"]);
+
+/**
+ * Test runs must never reach the host's real service manager. The launchd label and the
+ * systemd user unit are global to the user account, so a test that falls through to the
+ * default runner can stop and disable a live Paperclip service even when HOME points at a
+ * temporary directory. Tests inject a fake runner or detector instead.
+ */
+export function assertServiceManagerCommandAllowed(command: string, env: NodeJS.ProcessEnv = process.env): void {
+  if (!SERVICE_MANAGER_COMMANDS.has(path.basename(command))) return;
+  const underTest = env.VITEST === "true" || env.NODE_ENV === "test";
+  if (underTest && env.PAPERCLIP_TEST_ALLOW_REAL_SERVICE_MANAGER !== "1") {
+    throw new Error(`Refusing to run ${path.basename(command)} against the real service manager from a test. Inject a fake runner or service manager detector.`);
+  }
+}
+
 export const defaultCommandRunner: CommandRunner = async (command, args, options) => {
+  assertServiceManagerCommandAllowed(command);
   if (options?.inherit) {
     await new Promise<void>((resolve, reject) => {
       const child = execFile(command, args, { windowsHide: true }, (error) => error ? reject(error) : resolve());
