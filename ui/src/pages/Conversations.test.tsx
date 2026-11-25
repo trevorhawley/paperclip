@@ -62,6 +62,7 @@ describe("Conversations", () => {
     expect(container.textContent).not.toContain("Recorded update");
     expect(container.textContent).toContain("Decisions");
     expect(container.textContent).toContain("Action items");
+    expect(container.textContent).toContain("Which site has reliable shade?");
     expect(container.textContent).not.toContain("Open task");
     const date = container.querySelector<HTMLInputElement>('input[type="date"]')!;
     await act(async () => {

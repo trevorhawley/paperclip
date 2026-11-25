@@ -8,6 +8,7 @@ export interface MemoryPreviewSession {
   summary: string;
   decisions?: string[];
   actionItems?: string[];
+  openQuestions?: string[];
   chatUrl?: string;
 }
 
@@ -21,6 +22,7 @@ export const memoryPreviewSessions: MemoryPreviewSession[] = [
     summary: "Explored plot layouts, water access and a volunteer schedule. A small pilot would let the group measure demand before adding more plots.",
     decisions: ["Start with four shared beds."],
     actionItems: ["Check water access with the site coordinator.", "Ask volunteers about weekend availability."],
+    openQuestions: ["Which site has reliable shade?"],
   },
   {
     id: "05a32c80-3c44-48e9-8dcb-82c1c695f538",

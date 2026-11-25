@@ -71,7 +71,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
     (!project || item.project === project) &&
     (!search || [item.title, item.task?.identifier, item.platform, item.model,
       item.summary, item.chatUrl, item.project,
-      ...(item.source === "memory" ? [...(item.decisions ?? []), ...(item.actionItems ?? [])] : [])]
+      ...(item.source === "memory" ? [...(item.decisions ?? []), ...(item.actionItems ?? []), ...(item.openQuestions ?? [])] : [])]
       .some(value => value?.toLowerCase().includes(search))),
   );
   const selectedId = params.get("update");
@@ -167,6 +167,7 @@ function ConversationHistory({ companyId }: { companyId: string }) {
             {selected.source === "memory" && <>
               <ConversationNotes title="Decisions" items={selected.decisions} />
               <ConversationNotes title="Action items" items={selected.actionItems} />
+              <ConversationNotes title="Open questions" items={selected.openQuestions} />
             </>}
           </article> : selectedId && <p className="text-sm text-muted-foreground md:col-span-2">This update is unavailable.</p>}
         </div>
