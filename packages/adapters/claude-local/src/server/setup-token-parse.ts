@@ -181,6 +181,13 @@ const URL_PREAMBLE_RE = /the url below to sign in/i;
 // the line.
 const PROMPT_LINE_RE = /^Paste code here if prompted\b[\s>*]*$/;
 
+// Claude Code 2.1.330 can issue an opaque browser handle on the existing
+// claude.ai authorization endpoint instead of exposing the PKCE query fields.
+const SHORT_AUTHORIZATION_URL_RE = /^https:\/\/claude\.ai\/oauth\/authorize\?[A-Za-z0-9_-]{43}$/;
+const SHORT_PROMPT_LINE_RE = /^Paste code here\b[\s>*]*$/;
+const WRAPPED_COPY_HINT_START_RE = /^Hold\s+Shift(?:\s+\(Option in iTerm2, Fn in Terminal\.app\))?\s+while\s+selecting\s+to\s+use\s+your$/i;
+const WRAPPED_COPY_HINT_END_RE = /^terminal['’]s\s+native\s+copy\.?$/i;
+
 // The copy hint that `claude` 2.1.291 prints between the URL block and the
 // prompt. The parser skips this exact line and binds no value from it.
 const COPY_HINT_LINE_RE = /^Hold\s+Shift\s+while\s+selecting\s+to\s+use\s+your\s+terminal['’]s\s+native\s+copy\.?$/i;
@@ -335,7 +342,7 @@ function validateAuthUrl(candidate: string): string | null {
   if (parsed.port !== "" || parsed.hash !== "") return null;
   const pair = `${parsed.origin}${parsed.pathname}`;
   if (!SETUP_TOKEN_AUTH_URLS.includes(pair as (typeof SETUP_TOKEN_AUTH_URLS)[number])) return null;
-  if (!hasValidQuery(parsed)) return null;
+  if (!SHORT_AUTHORIZATION_URL_RE.test(candidate) && !hasValidQuery(parsed)) return null;
   return candidate;
 }
 
@@ -382,7 +389,12 @@ function findBrowserCodePrompt(lines: string[], endLine: number, url: string): s
     // repeated URL with a trailing punctuation mark still matches.
     if (trimmed.replace(TRAILING_PUNCTUATION_RE, "") === url) continue;
     if (COPY_HINT_LINE_RE.test(trimmed)) continue;
-    return PROMPT_LINE_RE.test(trimmed) ? SETUP_TOKEN_PROMPT : null;
+    if (WRAPPED_COPY_HINT_START_RE.test(trimmed) && WRAPPED_COPY_HINT_END_RE.test(lines[i + 1]?.trim() ?? "")) {
+      i += 1;
+      continue;
+    }
+    const shortPrompt = SHORT_AUTHORIZATION_URL_RE.test(url) && SHORT_PROMPT_LINE_RE.test(trimmed);
+    return PROMPT_LINE_RE.test(trimmed) || shortPrompt ? SETUP_TOKEN_PROMPT : null;
   }
   return null;
 }
