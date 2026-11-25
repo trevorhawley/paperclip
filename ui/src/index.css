@@ -5152,12 +5152,14 @@ html:not(.dark) .coordinator-sidebar {
 .coordinator-workspace .task-chat-composer-dock > :last-child { border-radius: var(--coordinator-card-radius); }
 .coordinator-workspace [cmdk-root] { height: auto; flex: none; }
 .coordinator-workspace [cmdk-list] { flex: none; }
-.coordinator-decision-card { border: 1px solid var(--border); border-radius: var(--coordinator-card-radius, var(--radius-xl)); padding: var(--coordinator-card-inset, calc(var(--spacing) * 6)); background: var(--card); box-shadow: var(--coordinator-card-shadow); }
+.coordinator-decision-card { border: 1px solid var(--border); border-radius: var(--coordinator-card-radius, var(--radius-xl)); padding: var(--coordinator-card-inset, calc(var(--spacing) * 4)); background: var(--card); box-shadow: var(--coordinator-card-shadow); }
+.coordinator-decision-card.coordinator-decision-row { border: 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent); border-radius: 0; padding: calc(var(--spacing) * 2) calc(var(--spacing) * 1); background: transparent; box-shadow: none; }
+.coordinator-decision-motion:has(> .coordinator-task-commitment-content > .coordinator-decision-row) { border: 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent); border-radius: 0; box-shadow: none; background: transparent; }
 .coordinator-decision-card > .rounded-lg { border: 0; padding: 0; background: transparent; box-shadow: none; }
 .coordinator-decision-card [data-testid="interaction-status-badge"], .coordinator-decision-card [data-testid="interaction-addressee-badge"] { display: none; }
-.coordinator-decision-card :is(h2,h3) { font-size: var(--text-lg); line-height: var(--text-lg--line-height); font-weight: var(--font-weight-medium); }
+.coordinator-decision-card :is(h2,h3) { font-size: var(--text-base); line-height: var(--text-base--line-height); font-weight: var(--font-weight-medium); }
 .coordinator-decision-card :is(p, label) { font-size: var(--text-sm); line-height: var(--text-sm--line-height); }
-.coordinator-decision-card [data-decision-prompt] { font-size: var(--text-lg); line-height: var(--text-lg--line-height); font-weight: var(--font-weight-medium); }
+.coordinator-decision-card [data-decision-prompt] { font-size: var(--text-base); line-height: var(--text-base--line-height); font-weight: var(--font-weight-medium); }
 .coordinator-decision-card [id^="interaction-"]:focus { outline-color: var(--ring); }
 @media (max-width: 767px) {
   .coordinator-workspace { --coordinator-card-inset: calc(var(--spacing) * 5); }

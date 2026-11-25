@@ -93,68 +93,68 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
   const failedTasks = failedRuns.map(run => ({ run, task: issueById.get(issueIdForRun(run) ?? "") }))
     .filter(({ task }) => task?.status !== "done" && task?.status !== "cancelled");
 
-  return <div className="space-y-5">
-    <section aria-label="Executing now" className="space-y-2">
-      <h2 className="text-lg font-medium">Executing now</h2>
-      {live.isPending ? <p role="status">Checking execution…</p> : live.isError ? <p role="alert">Execution status could not be loaded. <Button variant="ghost" onClick={() => void live.refetch()}>Retry</Button></p> :
+  return <div className="space-y-4">
+    <section aria-label="Executing now" className="space-y-1">
+      <h2 className="text-sm font-semibold">Executing now</h2>
+      {live.isPending ? <p role="status">Checking execution…</p> : live.isError ? <p role="alert">Execution status could not be loaded. <Button variant="ghost" size="sm" onClick={() => void live.refetch()}>Retry</Button></p> :
         !running.length && !waiting.length ? <p className="text-sm text-muted-foreground">No live runs.</p> : null}
       {[...running, ...waiting].slice(0, LIMIT).map(run => {
         const task = run.issueId ? issueById.get(run.issueId) : undefined;
         const progress = run.currentStatusMessage?.trim() || run.lastAssistantSnippet?.trim();
         const time = run.lastUsefulActionAt ?? run.execution?.lastConfirmedActivityAt;
-        return <article key={run.id} className="space-y-1 rounded-lg border border-border p-3 text-sm">
+        return <article key={run.id} className="min-w-0 space-y-0.5 border-b border-border/60 py-1.5 text-sm last:border-0">
           {task ? taskName(task) : <span className="font-medium">{run.agentName}</span>}
-          <p className="text-muted-foreground">{[run.execution?.label ?? (run.status === "queued" ? "Queued" : "Running"), task ? taskContext(task, run.agentId) || run.agentName : null].filter(Boolean).join(" · ")}</p>
-          {progress && <p className="line-clamp-2 break-words">{progress}</p>}
+          <p className="truncate text-xs text-muted-foreground">{[run.execution?.label ?? (run.status === "queued" ? "Queued" : "Running"), task ? taskContext(task, run.agentId) || run.agentName : null].filter(Boolean).join(" · ")}</p>
+          {progress && <p className="truncate text-xs">{progress}</p>}
           {time && <p className="text-xs text-muted-foreground">Last confirmed progress <time dateTime={time}>{new Date(time).toLocaleString()}</time></p>}
         </article>;
       })}
     </section>
-    {failures.isError ? <p role="alert" className="text-sm">Failed runs could not be loaded. <Button variant="ghost" onClick={() => void failures.refetch()}>Retry</Button></p> :
-      failedTasks.length > 0 && <section aria-label="Runs that failed" className="space-y-2">
-        <h2 className="text-lg font-medium">Runs that failed</h2>
+    {failures.isError ? <p role="alert" className="text-sm">Failed runs could not be loaded. <Button variant="ghost" size="sm" onClick={() => void failures.refetch()}>Retry</Button></p> :
+      failedTasks.length > 0 && <section aria-label="Runs that failed" className="space-y-1">
+        <h2 className="text-sm font-semibold">Runs that failed</h2>
         {failedTasks.map(({ run, task }) => {
           const agent = agents.get(run.agentId);
           const time = run.finishedAt ?? run.createdAt;
-          return <article key={run.id} className="space-y-1 rounded-lg border border-border p-3 text-sm">
+          return <article key={run.id} className="min-w-0 space-y-0.5 border-b border-border/60 py-1.5 text-sm last:border-0">
             {task ? taskName(task) : <span className="font-medium">{agent?.name ?? "Agent run"}</span>}
-            <p className="text-muted-foreground">{[run.status === "timed_out" ? "Timed out" : "Failed", agent?.name].filter(Boolean).join(" · ")}</p>
-            {run.error?.trim() && <p className="line-clamp-2 break-words">{run.error.trim()}</p>}
+            <p className="truncate text-xs text-muted-foreground">{[run.status === "timed_out" ? "Timed out" : "Failed", agent?.name].filter(Boolean).join(" · ")}</p>
+            {run.error?.trim() && <p className="truncate text-xs">{run.error.trim()}</p>}
             <p className="text-xs text-muted-foreground"><time dateTime={new Date(time).toISOString()}>{new Date(time).toLocaleString()}</time> · <Link className="underline" to={`/agents/${run.agentId}/runs/${run.id}`}>View run</Link></p>
           </article>;
         })}
       </section>}
     {work.isPending ? <p role="status">Loading recent work…</p> : work.isError ?
-      <p role="alert">Recent work could not be loaded. <Button variant="ghost" onClick={() => void work.refetch()}>Retry</Button></p> : null}
-    {work.data && <>
-      <section aria-label="Blocked work" className="space-y-2">
-        <h2 className="text-lg font-medium">Blocked work</h2>
+      <p role="alert">Recent work could not be loaded. <Button variant="ghost" size="sm" onClick={() => void work.refetch()}>Retry</Button></p> : null}
+    {work.data && <div className="grid gap-4 md:grid-cols-3">
+      <section aria-label="Blocked work" className="space-y-1">
+        <h2 className="text-sm font-semibold">Blocked work</h2>
         {work.data.blocked.length === 0 && <p className="text-sm text-muted-foreground">No blocked tasks.</p>}
         {work.data.blocked.map(task => {
           const blocker = task.blockedInboxAttention;
-          return <article key={task.id} className="space-y-1 rounded-lg border border-border p-3 text-sm">
+          return <article key={task.id} className="min-w-0 space-y-0.5 border-b border-border/60 py-1.5 text-sm last:border-0">
             {taskName(task)}
-            {taskContext(task) && <p className="text-muted-foreground">{taskContext(task)}</p>}
-            {blocker?.action && <p>{blocker.action.detail || blocker.action.label}</p>}
-            {blocker?.owner.label && <p className="text-muted-foreground">Responsible for unblocking: {blocker.owner.label}</p>}
-            {!blocker && task.blockedBy?.filter(issue => issue.status !== "done").map(issue => <p key={issue.id}>Waiting on {issue.identifier} {issue.title}</p>)}
+            {taskContext(task) && <p className="truncate text-xs text-muted-foreground">{taskContext(task)}</p>}
+            {blocker?.action && <p className="truncate text-xs">{blocker.action.detail || blocker.action.label}</p>}
+            {blocker?.owner.label && <p className="truncate text-xs text-muted-foreground">Responsible for unblocking: {blocker.owner.label}</p>}
+            {!blocker && task.blockedBy?.filter(issue => issue.status !== "done").map(issue => <p key={issue.id} className="truncate text-xs">Waiting on {issue.identifier} {issue.title}</p>)}
           </article>;
         })}
       </section>
-      <section aria-label="Marked in progress" className="space-y-2">
-        <h2 className="text-lg font-medium">Marked in progress</h2>
-        {work.data.active.filter(task => !executingIds.has(task.id)).map(task => <p key={task.id} className="text-sm">
+      <section aria-label="Marked in progress" className="space-y-1">
+        <h2 className="text-sm font-semibold">Marked in progress</h2>
+        {work.data.active.filter(task => !executingIds.has(task.id)).map(task => <p key={task.id} className="truncate text-sm">
           {taskName(task)} {taskContext(task) && <span className="text-muted-foreground"> · {taskContext(task)}</span>}
         </p>)}
         {!work.data.active.some(task => !executingIds.has(task.id)) && <p className="text-sm text-muted-foreground">No other tasks marked in progress.</p>}
       </section>
-      <section aria-label="Recently completed" className="space-y-2">
-        <h2 className="text-lg font-medium">Recently completed</h2>
+      <section aria-label="Recently completed" className="space-y-1">
+        <h2 className="text-sm font-semibold">Recently completed</h2>
         {!work.data.completed.some(task => task.completedAt != null) && <p className="text-sm text-muted-foreground">No completed tasks.</p>}
-        {work.data.completed.filter(task => task.completedAt != null).sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime()).map(task => <p key={task.id} className="text-sm">
+        {work.data.completed.filter(task => task.completedAt != null).sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime()).map(task => <p key={task.id} className="truncate text-sm">
           {taskName(task)} {taskContext(task) && <span className="text-muted-foreground"> · {taskContext(task)}</span>}
         </p>)}
       </section>
-    </>}
+    </div>}
   </div>;
 }
