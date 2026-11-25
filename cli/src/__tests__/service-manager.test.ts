@@ -215,3 +215,21 @@ describe("single-writer guard", () => {
   });
 
 });
+
+describe("real service manager guard", () => {
+  it("refuses launchd and systemd commands under test unless explicitly allowed", async () => {
+    const { assertServiceManagerCommandAllowed } = await import("../services/service-manager.js");
+    expect(() => assertServiceManagerCommandAllowed("launchctl", { VITEST: "true" })).toThrow("Refusing to run launchctl");
+    expect(() => assertServiceManagerCommandAllowed("/bin/launchctl", { VITEST: "true" })).toThrow("Refusing to run launchctl");
+    expect(() => assertServiceManagerCommandAllowed("systemctl", { NODE_ENV: "test" })).toThrow("Refusing to run systemctl");
+    expect(() => assertServiceManagerCommandAllowed("loginctl", { VITEST: "true" })).toThrow("Refusing to run loginctl");
+    expect(() => assertServiceManagerCommandAllowed("launchctl", { VITEST: "true", PAPERCLIP_TEST_ALLOW_REAL_SERVICE_MANAGER: "1" })).not.toThrow();
+    expect(() => assertServiceManagerCommandAllowed("launchctl", {})).not.toThrow();
+    expect(() => assertServiceManagerCommandAllowed("git", { VITEST: "true" })).not.toThrow();
+  });
+
+  it("blocks the default runner before it can reach launchctl", async () => {
+    const { defaultCommandRunner } = await import("../services/service-manager.js");
+    await expect(defaultCommandRunner("launchctl", ["print", "gui/0/never-real"])).rejects.toThrow("Refusing to run launchctl");
+  });
+});
