@@ -4,6 +4,12 @@ import type { LifecycleFailure } from "./ports.js";
 const reasons = {
   harness_test_failed: "The execution test did not pass. Open Configuration and run the agent test to inspect the failed checks.",
   ai_connection_required: "This agent's environment requires a managed AI connection and an isolated Runner home. Check both in Configuration, then retry.",
+  ai_connection_default_missing: "Choose a personal default AI connection for this provider in AI Connections.",
+  ai_connection_missing: "The selected AI connection is unavailable. Select a replacement in Configuration.",
+  ai_connection_unavailable: "Reconnect or verify the selected AI connection, then check Configuration.",
+  ai_connection_responsible_user_missing: "Assign a responsible user for this agent's AI connection in Configuration.",
+  ai_connection_incompatible: "Select an AI connection that supports this execution tool and model in Configuration.",
+  ai_connection_credential_not_shared: "Choose a connection available to the responsible user, or ask its owner to share it.",
   harness_auth_failed: "Authentication failed. Check the agent's AI connection or sign in to its execution tool, then retry.",
   harness_model_unavailable: "The selected model is unavailable. Choose a model supported by the agent's AI connection in Configuration, then retry.",
   harness_command_unavailable: "The execution command was not found. Check the command and its installation in the agent's environment, then retry.",
@@ -18,7 +24,10 @@ const reasons = {
 
 const transientCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "40001", "40P01", "53300", "57P01"]);
 const configurationFailures = new Set([
-  "ai_connection_required", "harness_auth_failed", "harness_model_unavailable",
+  "ai_connection_required", "ai_connection_default_missing", "ai_connection_missing",
+  "ai_connection_unavailable", "ai_connection_responsible_user_missing",
+  "ai_connection_incompatible", "ai_connection_credential_not_shared",
+  "harness_auth_failed", "harness_model_unavailable",
   "harness_command_unavailable", "harness_cwd_invalid", "harness_probe_unexpected_output",
 ]);
 

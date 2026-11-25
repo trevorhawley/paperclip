@@ -95,6 +95,12 @@ describe("lifecycle failure diagnostics", () => {
   it.each([
     ["host", "harness_model_unavailable", "Execution configuration check failed. The selected model is unavailable."],
     ["host", "ai_connection_required", "Execution configuration check failed. This agent's environment requires a managed AI connection and an isolated Runner home."],
+    ["host", "ai_connection_default_missing", "Choose a personal default AI connection"],
+    ["host", "ai_connection_missing", "The selected AI connection is unavailable."],
+    ["host", "ai_connection_unavailable", "Reconnect or verify the selected AI connection"],
+    ["host", "ai_connection_responsible_user_missing", "Assign a responsible user"],
+    ["host", "ai_connection_incompatible", "Select an AI connection that supports"],
+    ["host", "ai_connection_credential_not_shared", "Choose a connection available to the responsible user"],
     ["plugin", "required_plugin_unavailable", "Execution configuration check: required plugin step failed. A required plugin is unavailable."],
     ["select_plugins", "unknown private code", "Execution configuration check: finding required plugins failed. Paperclip could not complete this step."],
     ["transition", "40P01", "Execution configuration check: saving progress failed. Paperclip could not complete this step."],

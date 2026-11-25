@@ -8,6 +8,7 @@ import { heartbeatService } from "./heartbeat.js";
 import { listInvalidOrgChainDescendantIds } from "./agent-invokability.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
 import type { LifecycleDriver } from "../modules/agent-lifecycle/index.js";
+import { readAiConnectionConfigurationFailure } from "./ai-connection-configuration-failure.js";
 import { agentHarnessVerificationService } from "./agent-harness-verification.js";
 import { agentInstanceSecretService } from "./agent-instance-secrets.js";
 
@@ -56,7 +57,15 @@ export function createLifecycleDriver(db: Db, manager: PluginWorkerManager): Lif
       return result.status;
     },
     async runHost(agent) {
-      if (agent.lifecycleState === "verifying") return verify(agent);
+      if (agent.lifecycleState === "verifying") {
+        try {
+          return await verify(agent);
+        } catch (error) {
+          const code = readAiConnectionConfigurationFailure(error);
+          if (!code) throw error;
+          throw Object.assign(new Error("AI connection configuration requires attention"), { code });
+        }
+      }
       if (["pausing", "terminating", "cleaning_up"].includes(agent.lifecycleState)) {
         const ids = agent.lifecycleState === "pausing" ? [agent.id]
           : [agent.id, ...listInvalidOrgChainDescendantIds(agent.id,
