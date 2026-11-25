@@ -4,6 +4,16 @@ Added 2026-11-26 at Trevor's request. Applies to every new or changed screen in 
 
 Paperclip should feel like the Claude app: compact, calm and efficient with screen space. Current Inbox decision cards (large bordered boxes, big black buttons, generous whitespace) are the reference for what to move away from.
 
+## Principle: clear at a glance
+
+Every screen and every row must answer three questions in a split second, without opening anything:
+
+- **What is this?** A plain-language title, not an internal label or test name.
+- **Why does it matter?** The project, owner or consequence it affects (e.g. "blocks the launch", "needs your approval").
+- **What do I get from looking?** The outcome or next step: done, decided, waiting on you, failed and why.
+
+If a row can't answer these, fix the data or the row, or remove the screen.
+
 ## Rules
 
 1. **Rows before cards.** Lists of tasks, decisions, runs and history render as compact rows (≈32–40px, `py-1.5`, a hairline divider) rather than padded bordered cards. Use a card only when the item needs inline interaction such as a form or answer choices.
