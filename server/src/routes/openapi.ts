@@ -4256,6 +4256,16 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/companies/{companyId}/trevor-memory",
+  tags: ["issues"],
+  summary: "Read authorized external conversation history",
+  description: "Optional owner-only read of Trevor AI Memory. Disabled until explicitly configured. Results are bounded to 25.",
+  request: { params: z.object({ companyId: z.string() }), query: z.object({ query: z.string().optional(), id: z.string().uuid().optional() }) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
 // ─── Issues ──────────────────────────────────────────────────────────────────
 
 registry.registerPath({
