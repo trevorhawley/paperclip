@@ -337,6 +337,33 @@ describe("ProjectDetail", () => {
     expect(props).not.toHaveProperty("projectTimelineHref");
   });
 
+  it("preserves the project task-list return location when opening a task", async () => {
+    mockLocation.pathname = "/projects/project-1/issues";
+    mockLocation.search = "?q=review";
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <ProjectDetail />
+        </QueryClientProvider>,
+      );
+    });
+    await settle();
+
+    expect(mockIssuesList.mock.calls.at(-1)?.[0]).toMatchObject({
+      projectId: "project-1",
+      issueLinkState: {
+        issueDetailSource: "issues",
+        issueDetailBreadcrumb: {
+          label: "Managed Project",
+          href: "/projects/project-1/issues?q=review",
+        },
+      },
+    });
+  });
+
   describe("plugin detail-tab deep links", () => {
     const PLUGIN_TAB = "plugin:paperclipai.plugin-llm-wiki:project-knowledge";
     const knowledgeSlot = {

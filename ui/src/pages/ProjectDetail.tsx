@@ -31,6 +31,7 @@ import { MembershipAction } from "../components/MembershipAction";
 import { StarToggle } from "../components/StarToggle";
 import { buildProjectWorkspaceSummaries } from "../lib/project-workspaces-tab";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
+import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { projectRouteRef } from "../lib/utils";
 import { PROJECT_ICONS } from "../lib/project-icons";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
@@ -188,7 +189,12 @@ function ProjectTilePicker({
 
 /* ── List (issues) tab content ── */
 
-function ProjectIssuesList({ projectId, companyId }: { projectId: string; companyId: string }) {
+function ProjectIssuesList({ projectId, companyId, projectName }: { projectId: string; companyId: string; projectName: string }) {
+  const location = useLocation();
+  const issueLinkState = useMemo(
+    () => createIssueDetailLocationState(projectName, `${location.pathname}${location.search}${location.hash}`, "issues"),
+    [projectName, location.pathname, location.search, location.hash],
+  );
   const showAgentCreatedTasks = useShowAgentCreatedTasks(companyId, "paperclip:project-issues-view");
   const queryClient = useQueryClient();
 
@@ -247,6 +253,7 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
       projectId={projectId}
       enableAgentCreatedVisibilityFilter
       viewStateKey="paperclip:project-issues-view"
+      issueLinkState={issueLinkState}
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
     />
   );
@@ -884,7 +891,7 @@ export function ProjectDetail() {
 
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (
-        <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} />
+        <ProjectIssuesList projectId={project.id} companyId={resolvedCompanyId} projectName={project.name} />
       )}
 
       {activeTab === "plugin-operations" && project?.id && resolvedCompanyId && project.managedByPlugin && (
