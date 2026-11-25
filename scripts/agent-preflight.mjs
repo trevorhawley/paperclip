@@ -25,7 +25,7 @@
 // traceability and similar). They depend only on the same inputs, and CI runs
 // them; run `pnpm --filter @paperclipai/paperclip-runner build` for them locally.
 //
-// Usage: node scripts/agent-preflight.mjs [--no-cache] [--force-install] [--skip-rust-debug] [--explain]
+// Usage: node scripts/agent-preflight.mjs [--no-cache] [--force-install] [--skip-rust-debug] [--explain] [--toolchain-only]
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -265,20 +265,45 @@ function debugBinsStep(root, cache, toolchain, bins) {
 // --- main ------------------------------------------------------------------
 
 export function parseArguments(argv) {
-  const options = { cache: true, forceInstall: false, rustDebug: true, explain: false };
+  const options = { cache: true, forceInstall: false, rustDebug: true, explain: false, toolchainOnly: false };
   for (const argument of argv) {
     if (argument === "--no-cache") options.cache = false;
     else if (argument === "--force-install") options.forceInstall = true;
     else if (argument === "--skip-rust-debug") options.rustDebug = false;
     else if (argument === "--explain") options.explain = true;
+    else if (argument === "--toolchain-only") options.toolchainOnly = true;
     else throw new Error(`unknown argument ${argument}`);
   }
   return options;
 }
 
+function checkWorktreeTools(root, env) {
+  const manifest = readJson(path.join(root, "package.json"));
+  const pin = /^pnpm@([0-9]+\.[0-9]+\.[0-9]+)(?:\+.*)?$/.exec(manifest?.packageManager ?? "")?.[1];
+  if (!pin) throw new Error("The checkout must declare an exact pnpm version in package.json.");
+  const git = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root, env, encoding: "utf8", timeout: 10_000 });
+  if (git.status !== 0 || git.stdout?.trim() !== "true") {
+    throw new Error("Git could not read this worktree inside the execution environment. Provision a working Git and its required platform tools in that environment, then retry.");
+  }
+  const pnpm = spawnSync("pnpm", ["--version"], {
+    cwd: root,
+    env: { ...env, COREPACK_ENABLE_NETWORK: "0", npm_config_offline: "true" },
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  const installed = pnpm.stdout?.trim();
+  if (pnpm.status !== 0 || installed !== pin) {
+    const found = /^\d+\.\d+\.\d+$/.test(installed ?? "") ? ` Found ${installed}.` : "";
+    throw new Error(`This worktree requires pnpm ${pin} inside the execution environment.${found} Provision that version before retrying.`);
+  }
+  log(`worktree Git and pnpm ${pin} are available (Node ${process.versions.node})`);
+}
+
 export function preflight({ root, options, env = process.env }) {
   const started = Date.now();
   const results = [];
+  checkWorktreeTools(root, env);
+  if (options.toolchainOnly) return { results, seconds: (Date.now() - started) / 1000 };
   const record = result => {
     if (result) {
       results.push(result);

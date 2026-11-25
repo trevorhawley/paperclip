@@ -47,6 +47,20 @@ pnpm dev:stop --data-dir /path/to/preview-directory
 
 You can also stop the foreground process with Ctrl-C. Retain the temporary directory for inspection; remove it manually only after verifying it is the disposable preview directory and the process is stopped.
 
+## Managed developer workspaces
+
+Run `node scripts/agent-preflight.mjs --toolchain-only` inside the same
+execution environment and worktree the developer will use. This check
+requires Git to read the worktree and the repository's exact pnpm version to
+already be available. It does not install dependencies or build the Runner.
+
+Provision the tools through the existing execution environment or its image.
+On macOS, Git and its Command Line Tools dependencies must be usable within
+that environment. On Linux, use the image's Git package. Preinstall the pinned
+pnpm release into the same environment before the task starts. A pass from the
+host shell or from repository preparation does not qualify the task runtime.
+Use a disposable workspace to verify the toolchain before resuming development.
+
 ## Verification and CI
 
 Use `pnpm verify --base origin/dev` for affected local tests after preflight; see AGENTS.md for exit code 2 and wider checks. Run focused tests for changed behavior. The fork PR workflow is intended to exercise the upstream policy checks, typecheck, build and Vitest suite on GitHub-hosted Linux with read-only token permissions and no production secrets. No live provider, deployment, or browser acceptance is implied by these checks. Record the tested SHA and actual job results in the PR. A pending, skipped, or unavailable check is not a pass.
