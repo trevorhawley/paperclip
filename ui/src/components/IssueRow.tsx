@@ -384,7 +384,7 @@ export function IssueRow({
               >
                 {issue.title}{titleSuffix}
               </span>}
-              {titleAside ? <span data-slot="task-row-title-aside" className="hidden min-w-0 max-w-[55%] shrink-[2] items-center sm:flex">{titleAside}</span> : null}
+              {titleAside ? <span data-slot="task-row-title-aside" className="hidden min-w-0 max-w-1/2 shrink items-center sm:flex">{titleAside}</span> : null}
               {stableLayout && recoveryIndicator ? (
                 <span data-slot="task-row-recovery">
                   <span className="hidden sm:inline">{recoveryIndicator}</span>
