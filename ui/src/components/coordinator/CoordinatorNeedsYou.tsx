@@ -32,6 +32,8 @@ import { CoordinatorDecisionReceipt as Receipt } from "./CoordinatorDecisionRece
 import { CoordinatorTaskMotion } from "./CoordinatorTaskCommitment";
 import { CoordinatorWorkList, coordinatorWorkViews, type CoordinatorWorkStatus } from "./CoordinatorWorkList";
 
+import { CoordinatorInboxOverview } from "./CoordinatorInboxOverview";
+
 type Group = "none" | "task" | "agent" | "project";
 
 function HistoryPanel({ companyId, agents, onClose, mobile = false }: { companyId: string; agents: Agent[]; onClose: () => void; mobile?: boolean }) {
@@ -96,6 +98,7 @@ export function CoordinatorNeedsYou() {
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [historyOpen, setHistoryOpen] = useState(false);
   const work = searchParams.get("work");
+  const overview = !work && !deepLinkDecisionId;
   const view = !deepLinkDecisionId && (work === "in_progress" || work === "blocked" || work === "done") ? work : "pending";
   const [now, setNow] = useState(Date.now);
   const [settling, setSettling] = useState<AttentionItem[]>([]);
@@ -140,20 +143,21 @@ export function CoordinatorNeedsYou() {
     return [...items].filter(([key]) => settlingIds.has(key) || (!receipts.has(key) && !savedIds.has(key))).map(([, item]) => item);
   }, [feed.data, settling, settlingIds, recentItems, savedIds]);
   const filtered = useMemo(() => pendingItems.filter((item) => {
+    if (overview) return true;
     const agentId = String(item.subject.metadata?.createdByAgentId ?? item.subject.metadata?.originAgentId ?? "");
     if (agentFilter && agentId !== agentFilter && item.originAgentName !== agentMap.get(agentFilter)?.name) return false;
     if (projectFilter && item.project?.id !== projectFilter) return false;
     return [item.subject.title, item.relatedIssue?.title, item.relatedIssue?.identifier, item.originAgentName, item.project?.name, attentionDetailLine(item)].join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
-  }).sort((a, b) => (sort === "oldest" ? 1 : -1) * (Date.parse(a.activityAt) - Date.parse(b.activityAt))), [pendingItems, agentFilter, projectFilter, query, sort, agentMap]);
+  }).sort((a, b) => (!overview && sort === "oldest" ? 1 : -1) * (Date.parse(a.activityAt) - Date.parse(b.activityAt))), [pendingItems, overview, agentFilter, projectFilter, query, sort, agentMap]);
   const groups = useMemo(() => {
     const result = new Map<string, AttentionItem[]>();
-    for (const item of filtered.slice(0, renderLimit)) {
+    for (const item of filtered.slice(0, overview ? 3 : renderLimit)) {
       const label = groupBy === "task" ? item.relatedIssue?.identifier ?? item.relatedIssue?.title ?? "Other decisions"
         : groupBy === "agent" ? item.originAgentName ?? "Other agents" : groupBy === "project" ? item.project?.name ?? "No project" : "";
       result.set(label, [...(result.get(label) ?? []), item]);
     }
     return [...result];
-  }, [filtered, groupBy, renderLimit]);
+  }, [filtered, groupBy, overview, renderLimit]);
   useEffect(() => {
     if (!deepLinkDecisionId || !selectedCompanyId || !pendingItems.some(item => item.sourceKind === "decision" && item.subject.id === deepLinkDecisionId)) return;
     if (view !== "pending") { setView("pending"); return; }
@@ -166,7 +170,7 @@ export function CoordinatorNeedsYou() {
     if (!card) return;
     card.focus({ preventScroll: true });
     card.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
-    setSearchParams(current => { const next = new URLSearchParams(current); next.delete("decisionId"); next.delete("work"); return next; }, { replace: true });
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete("decisionId"); next.set("work", "pending"); return next; }, { replace: true });
   }, [deepLinkDecisionId, selectedCompanyId, pendingItems, filtered, query, agentFilter, projectFilter, renderLimit, reducedMotion, setSearchParams, view]);
   const projects = useMemo(() => [...new Map([
     ...pendingItems.flatMap((item) => item.project ? [[item.project.id, item.project.name] as const] : []),
@@ -174,12 +178,12 @@ export function CoordinatorNeedsYou() {
   ]).entries()], [pendingItems, recentItems]);
   const filtersActive = Boolean(query.trim() || agentFilter || projectFilter);
   const closeHistory = useCallback(() => { setHistoryOpen(false); closePanel(); }, [closePanel]);
-  const setView = (nextView: CoordinatorWorkStatus | "pending") => {
+  const setView = (nextView: CoordinatorWorkStatus | "pending" | "overview") => {
     if (nextView !== "pending") closeHistory();
     setSearchParams(current => {
       const next = new URLSearchParams(current);
       next.delete("decisionId");
-      if (nextView === "pending") next.delete("work");
+      if (nextView === "overview") next.delete("work");
       else next.set("work", nextView);
       return next;
     });
@@ -221,7 +225,8 @@ export function CoordinatorNeedsYou() {
     </Sheet> : null}
     <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-medium">Inbox</h1>{view === "pending" ? <Button variant="ghost" onClick={showHistory}><History className="size-4" />Decision history</Button> : null}</header>
     <div role="group" aria-label="Inbox view" className="flex flex-wrap items-center gap-2">
-      <Button variant={view === "pending" ? "secondary" : "ghost"} aria-pressed={view === "pending"} onClick={() => setView("pending")}>Pending decisions</Button>
+      <Button variant={overview ? "secondary" : "ghost"} aria-pressed={overview} onClick={() => setView("overview")}>Overview</Button>
+      <Button variant={view === "pending" && !overview ? "secondary" : "ghost"} aria-pressed={view === "pending" && !overview} onClick={() => setView("pending")}>Pending decisions</Button>
       {(Object.keys(coordinatorWorkViews) as CoordinatorWorkStatus[]).map(status => (
         <Button key={status} variant={view === status ? "secondary" : "ghost"} aria-pressed={view === status} onClick={() => setView(status)}>
           {coordinatorWorkViews[status].title}
@@ -229,7 +234,8 @@ export function CoordinatorNeedsYou() {
       ))}
     </div>
     {view !== "pending" ? <CoordinatorWorkList key={`${selectedCompanyId}:${userId}:${view}`} companyId={selectedCompanyId} userId={userId} status={view} /> : <>
-    <div data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
+    {overview && <h2 className="text-lg font-medium">Decisions requiring attention</h2>}
+    <div hidden={overview} data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
       <ToolbarSearch query={query} onQueryChange={setQuery} label="Search decisions" placeholder="Search decisions or task IDs…" />
       <NativeSelect aria-label="Filter decisions by agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} className="w-auto"><option value="">All agents</option>{(agentQuery.data ?? []).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</NativeSelect>
       <NativeSelect aria-label="Filter decisions by project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} className="w-auto"><option value="">All projects</option>{projects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</NativeSelect>
@@ -238,7 +244,7 @@ export function CoordinatorNeedsYou() {
     </div>
     {feedWaiting ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading decisions…</p> : null}
     {(feedView.kind === "error") ? <div role="alert" className="space-y-2"><p className="text-sm">Decisions could not be loaded.</p><Button variant="outline" onClick={() => void feed.refetch()}>Retry</Button></div> : null}
-    {!feedWaiting && !(feedView.kind === "error") && filtered.length === 0 ? <div className="space-y-3 py-8 text-center"><p className="text-sm text-muted-foreground">{filtersActive && !visibleRecentItems.length ? "No decisions match these filters." : pendingItems.length ? "No open decisions match these filters." : "You're caught up."}</p><Button variant="ghost" onClick={showHistory}>Open decision history<ArrowUpRight className="size-4" /></Button></div> : null}
+    {!feedWaiting && !(feedView.kind === "error") && filtered.length === 0 ? <div className="space-y-3 py-8 text-center"><p className="text-sm text-muted-foreground">{!overview && filtersActive && !visibleRecentItems.length ? "No decisions match these filters." : pendingItems.length ? "No open decisions match these filters." : "You're caught up."}</p><Button variant="ghost" onClick={showHistory}>Open decision history<ArrowUpRight className="size-4" /></Button></div> : null}
     {groups.map(([label, items]) => <div key={label} className="space-y-4">{label ? <h2 className="text-sm font-medium text-muted-foreground">{label}</h2> : null}{items.map((item) => {
       const issueId = item.relatedIssue?.id ?? String(item.subject.metadata?.issueId ?? "");
       const interaction = item.sourceKind === "issue_thread_interaction" && isInlineResolvable(item) && issueId;
@@ -265,9 +271,11 @@ export function CoordinatorNeedsYou() {
       </CoordinatorTaskMotion>
       </motion.div>;
     })}</div>)}
-    {filtered.length > renderLimit ? <Button variant="outline" onClick={() => setRenderLimit((value) => value + 40)}>Show more decisions</Button> : null}
-    {visibleRecentItems.length ? <section className="space-y-3" aria-label="Recent Decisions"><h2 className="text-sm font-medium text-muted-foreground">Recent Decisions</h2>{recentGroups.map(([label, items]) => <div key={label} className="space-y-3">{label ? <h3 className="text-sm font-medium text-muted-foreground">{label}</h3> : null}{items.map((item) => <motion.div layout={!reducedMotion} layoutId={reducedMotion ? undefined : item.id} transition={{ duration }} key={item.id}><Receipt item={item} onOpen={navigate} /></motion.div>)}</div>)}</section> : null}
+    {overview && filtered.length > 3 ? <Button variant="outline" onClick={() => setView("pending")}>See all decisions</Button> : null}
+    {!overview && filtered.length > renderLimit ? <Button variant="outline" onClick={() => setRenderLimit((value) => value + 40)}>Show more decisions</Button> : null}
+    {!overview && visibleRecentItems.length ? <section className="space-y-3" aria-label="Recent Decisions"><h2 className="text-sm font-medium text-muted-foreground">Recent Decisions</h2>{recentGroups.map(([label, items]) => <div key={label} className="space-y-3">{label ? <h3 className="text-sm font-medium text-muted-foreground">{label}</h3> : null}{items.map((item) => <motion.div layout={!reducedMotion} layoutId={reducedMotion ? undefined : item.id} transition={{ duration }} key={item.id}><Receipt item={item} onOpen={navigate} /></motion.div>)}</div>)}</section> : null}
     {(recentView.kind === "error") ? <p role="alert" className="text-sm text-muted-foreground">Recent decisions could not be loaded. <button className="underline" onClick={() => void recent.refetch()}>Retry</button></p> : null}
+    {overview && <CoordinatorInboxOverview companyId={selectedCompanyId} userId={userId} agents={agentMap} />}
     </>}
   </section></LayoutGroup>;
 }

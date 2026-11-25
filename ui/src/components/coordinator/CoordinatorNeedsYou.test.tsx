@@ -15,6 +15,7 @@ vi.mock("@/context/PanelContext", () => ({ usePanel: () => ({ openPanel: fixture
 vi.mock("@/context/SidebarContext", () => ({ useSidebar: () => ({ isMobile: fixture.mobile }) }));
 vi.mock("@/hooks/useCoordinatorWorkspaceEnabled", () => ({ useCoordinatorWorkspaceEnabled: () => ({ userId: "reviewer" }) }));
 vi.mock("@/lib/router", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/router")>(), useNavigate: () => fixture.navigate }));
+vi.mock("./CoordinatorInboxOverview", () => ({ CoordinatorInboxOverview: () => <div>Work overview</div> }));
 vi.mock("@/api/issues", () => ({ issuesApi: { listCompact: fixture.completedList } }));
 vi.mock("@/api/agents", () => ({ agentsApi: { list: async () => [] } }));
 vi.mock("@/api/projects", () => ({ projectsApi: { list: async () => [] } }));
@@ -47,7 +48,7 @@ let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
   fixture.pending = ["1", "2", "3"].map((id) => ({ id, sourceKind: "issue_thread_interaction", inlineResolvable: true, subject: { id, kind: "interaction", title: `Review ${id}`, metadata: { issueId: `task-${id}` } }, relatedIssue: { id: `task-${id}`, identifier: `PAP-${id}`, title: `Task ${id}`, href: `/PAP/issues/PAP-${id}` }, activityAt: new Date().toISOString() } as unknown as AttentionItem));
-  fixture.history = []; fixture.url = "/decisions"; vi.clearAllMocks();
+  fixture.history = []; fixture.url = "/decisions?work=pending"; vi.clearAllMocks();
   fixture.companyId = "company"; fixture.completedList.mockReset().mockResolvedValue([]);
   fixture.historyFail = false; fixture.feedFail = false; fixture.partial = false; fixture.mobile = false;
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
@@ -115,6 +116,8 @@ describe("Coordinator Needs You", () => {
     await flush();
     expect(fixture.completedList).not.toHaveBeenCalled();
     expect(container.querySelectorAll("article")).toHaveLength(3);
+    expect(container.textContent).toContain("Work overview");
+    await click("Pending decisions");
     const select = container.querySelector<HTMLSelectElement>('select[aria-label="Sort decisions"]')!;
     await act(async () => { select.value = "oldest"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     await click("Completed work"); await flush();
@@ -182,7 +185,7 @@ describe("Coordinator Needs You", () => {
     expect(card).not.toBeNull();
     expect(document.activeElement).toBe(card);
     expect(scroll).toHaveBeenCalledWith({ block: "center", behavior: "auto" });
-    expect(container.querySelector("[data-location]")?.textContent).toBe("?q=kept");
+    expect(container.querySelector("[data-location]")?.textContent).toBe("?q=kept&work=pending");
     // Consumed links must not refocus on an ordinary feed refresh.
     scroll.mockClear();
     await act(async () => { await client.invalidateQueries({ queryKey: ["attention"] }); }); await flush();
