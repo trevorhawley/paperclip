@@ -15,3 +15,16 @@ integration. Production deployment requires separate authorization.
 
 The local acceptance branch contains cherry-picks of PR #5 solely for DEV
 browser inspection. The original feature branches and commits remain available.
+
+## Interface and future acceptance
+
+Native ChatGPT web and mobile are Trevor's primary conversational interface and
+executive coordinator. Paperclip provides operations, context, coordination and
+deliberate execution across assistants. Conversations can originate externally.
+Keep authenticated MCP reads, passive progress recording, task management and
+explicit delegation available.
+
+Future cross-client acceptance includes ChatGPT mobile Voice mode with the
+Paperclip connector. Verify hands-free project discussion, context retrieval,
+progress updates and deliberate delegation when that client supports the
+connection. This is a separate acceptance item, not a gate for current work.
