@@ -63,6 +63,8 @@ describe("never-started task refused by admission", () => {
         state: "working", retryWait: { reason: "heartbeat.scheduling_suppressed", message: expect.stringContaining("switched off") } });
     }
     expect(projectTaskInterruption({ ...issue, status: "done" }, { agent, admissionWait: suppressed, paused: false, approval: false })).toBeNull();
+    expect(projectTaskInterruption({ ...issue, status: "in_progress" }, { agent, admissionWait: { ...admissionWait, reason: "heartbeat.worktree_execution_cutoff" }, paused: false, approval: false }))
+      .toMatchObject({ retryWait: { reason: "heartbeat.worktree_execution_cutoff", message: expect.stringContaining("Start a new chat") } });
     expect(projectTaskInterruption({ ...issue, status: "in_progress" }, { agent, admissionWait, paused: false, approval: false })).toBeNull();
   });
   it("keeps pauses and budget stops as user actions instead of promising an automatic start", () => {

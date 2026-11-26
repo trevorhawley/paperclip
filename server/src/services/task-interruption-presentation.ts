@@ -139,9 +139,10 @@ const admissionWaitMessages: Record<string, string> = {
   // A git-worktree preview refuses every run until an operator opts in; say so
   // instead of leaving the task or chat silently "Queued".
   "heartbeat.scheduling_suppressed": "Agent runs are switched off on this instance, so nothing will start. Turn on \"Run tasks in this worktree\" in Settings → Experimental, then send the message again.",
+  "heartbeat.worktree_execution_cutoff": "This was created before agent runs were turned on for this instance, so it stays parked. Start a new chat or create a new task to run it.",
 };
 /** Holds that stop work whatever the task's status (a chat stays in progress). */
-const statusIndependentAdmissionReasons = new Set(["heartbeat.scheduling_suppressed"]);
+const statusIndependentAdmissionReasons = new Set(["heartbeat.scheduling_suppressed", "heartbeat.worktree_execution_cutoff"]);
 
 /** Recognize old persisted failures without displaying arbitrary run error text. */
 function deniedProjectId(issue: ProjectionIssue, run?: ProjectionRun): string | null | undefined {
