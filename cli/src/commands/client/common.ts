@@ -261,16 +261,23 @@ function renderValue(value: unknown): string {
 }
 
 export function inferApiBaseFromConfig(configPath?: string): string {
-  const envHost = process.env.PAPERCLIP_SERVER_HOST?.trim() || "localhost";
+  let configHost: string | undefined;
   let port = Number(process.env.PAPERCLIP_SERVER_PORT || "");
+  let config: ReturnType<typeof readConfig> | null = null;
+  try {
+    config = readConfig(configPath);
+  } catch {
+    config = null;
+  }
+  // Use the host the server actually trusts. Browsers treat "localhost" and
+  // "127.0.0.1" as different origins, so a printed localhost link fails
+  // sign-in with "Invalid origin" on a 127.0.0.1-bound server.
+  const savedHost = typeof config?.server?.host === "string" ? config.server.host.trim() : "";
+  if (savedHost && !["0.0.0.0", "::", "[::]"].includes(savedHost)) configHost = savedHost;
+  const envHost = process.env.PAPERCLIP_SERVER_HOST?.trim() || configHost || "localhost";
 
   if (!Number.isFinite(port) || port <= 0) {
-    try {
-      const config = readConfig(configPath);
-      port = Number(config?.server?.port ?? 3100);
-    } catch {
-      port = 3100;
-    }
+    port = Number(config?.server?.port ?? 3100);
   }
 
   if (!Number.isFinite(port) || port <= 0) {
