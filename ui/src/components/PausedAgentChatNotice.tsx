@@ -16,7 +16,7 @@ export function PausedAgentChatNotice({ agent }: { agent: Pick<Agent, "id" | "na
     },
   });
   if (agent.status !== "paused" || resume.isSuccess) return null;
-  return <div role="status" data-paused-agent-notice className="mx-auto mb-2 flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm">
+  return <div role="status" data-paused-agent-notice className="flex w-full flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm">
     <span className="min-w-0 flex-1">
       <span className="font-medium">{agent.name} is paused</span>
       <span className="text-muted-foreground">, so it won't reply to new messages.</span>

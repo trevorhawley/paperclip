@@ -177,6 +177,10 @@ export function projectTaskInterruption(issue: ProjectionIssue, input: Projectio
   if (providerFailure) base.providerFailure = providerFailure;
   if (["failed", "scheduled_retry"].includes(run.status) && run.errorCode === "workspace_validation_failed"
       && typeof run.error === "string" && run.error.trim()) base.workspaceFailure = { message: run.error };
+  if (["failed", "scheduled_retry"].includes(run.status) && run.errorCode === "adapter_failed"
+      && typeof run.error === "string" && run.error.startsWith("Failed to materialize the selected skill version")) {
+    base.runFailure = { reason: "skill_unavailable" };
+  }
   const userAction = !issue.assigneeAgentId ? "assign_agent" : input.approval || run.errorCode === "native_provider_approval_required" ? "approval"
     : isAiAuthenticationBlocked(run) ? "reconnect"
       : run.errorCode === "native_provider_model_rejected" ? "choose_model"

@@ -176,6 +176,16 @@ it("preserves the actual workspace preparation error without changing retry auth
     .not.toHaveProperty("workspaceFailure");
 });
 
+it("names a skill that failed to load as a fixable reason, without exposing the raw error", () => {
+  const failedRun = { ...run, errorCode: "adapter_failed",
+    error: "Failed to materialize the selected skill version: Object not found", resultJson: null };
+  const presentation = projectTaskInterruption(issue, { run: failedRun, agent, paused: false, approval: false });
+  expect(presentation).toMatchObject({ state: "failed", runFailure: { reason: "skill_unavailable" } });
+  expect(JSON.stringify(presentation)).not.toContain("Object not found");
+  expect(projectTaskInterruption(issue, { run: { ...failedRun, error: "Something else" }, agent, paused: false, approval: false }))
+    .not.toHaveProperty("runFailure");
+});
+
 function operatorStoppedRun() {
   return { ...run, status: "cancelled", runtimeMode: "native" as const, companyId: issue.companyId,
     nativeIssueId: issue.id, errorCode: "cancelled", resultJson: {

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MemoryRouter } from "react-router-dom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +35,16 @@ describe("ordinary task interruption", () => {
     expect(retry).toHaveBeenCalledOnce();
     expect(container.querySelector("a, details, input, textarea")).toBeNull();
     expect(container.textContent).not.toMatch(/service attention|process|receipt|workspace/i);
+  });
+  it("explains a skill that failed to load and lets a chat start fresh", async () => {
+    const reset = vi.fn();
+    await act(async () => root.render(<MemoryRouter><ExecutionBlockerNotice presentation={{ ...failed, runFailure: { reason: "skill_unavailable" } }}
+      canRetry onRetry={retry} onResetSession={reset} agentName="DEV Test Agent" agentSkillsHref="/agents/a/skills" /></MemoryRouter>));
+    expect(container.textContent).toContain("DEV Test Agent couldn’t start because one of its skills failed to load");
+    expect(container.querySelector('a[href="/agents/a/skills"]')).not.toBeNull();
+    const fresh = [...container.querySelectorAll("button")].find(button => button.textContent === "Start fresh")!;
+    await act(async () => fresh.click());
+    expect(reset).toHaveBeenCalled();
   });
   it("shows persisted backoff with a usable Retry", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-20T00:00:00Z"));

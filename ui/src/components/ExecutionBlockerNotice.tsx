@@ -23,11 +23,14 @@ const blockerAction: Record<string, string> = {
 };
 
 /** One ordinary interruption surface. Technical records remain in diagnostics. */
-export function ExecutionBlockerNotice({ presentation, canRetry, onRetry, optimistic, takingLonger, error, className, issueId, agentName, projectName, blockers }: {
+export function ExecutionBlockerNotice({ presentation, canRetry, onRetry, onResetSession, agentSkillsHref, optimistic, takingLonger, error, className, issueId, agentName, projectName, blockers }: {
   presentation: TaskInterruptionPresentation | null | undefined;
   blockers?: IssueRelationIssueSummary[];
   canRetry: boolean;
   onRetry: () => void;
+  /** Chats only: start a fresh session so a failed attempt never leaves the chat stuck. */
+  onResetSession?: () => void;
+  agentSkillsHref?: string;
   optimistic?: boolean;
   takingLonger?: boolean;
   error?: Error | null;
@@ -91,7 +94,10 @@ export function ExecutionBlockerNotice({ presentation, canRetry, onRetry, optimi
           : presentation.retryWait ? presentation.retryWait.message
           : presentation.workspaceFailure
             ? <>Couldn’t prepare the task folders. {presentation.workspaceFailure.message}</>
+            : presentation.runFailure?.reason === "skill_unavailable"
+              ? <>{agentName ?? "The agent"} couldn’t start because one of its skills failed to load. Your message is saved.{agentSkillsHref ? <> <Link to={agentSkillsHref} className="underline underline-offset-2">Check its skills</Link> and turn off or re-sync the broken one, then Retry.</> : null}</>
             : "Couldn’t finish this attempt. Your message is saved."}</span>
+        {onResetSession && presentation.state === "failed" ? <Button variant="ghost" size="sm" className="shrink-0" onClick={onResetSession}>Start fresh</Button> : null}
         {canRetry && presentation.canRetry && <Button variant="outline" size="sm" className="shrink-0" onClick={onRetry}>Retry</Button>}
       </div>
     </div>
