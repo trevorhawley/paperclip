@@ -63,6 +63,9 @@ describe("heartbeat task markdown rendering", () => {
     expect(optedIn).toContain("Coordinator reply style:");
     expect(optedIn).toContain("Lead with the outcome");
     expect(classic).not.toContain("Coordinator reply style:");
+    expect(optedIn).not.toContain("Delegation:");
+    expect(buildPaperclipTaskMarkdown({ issue, nativeRunner: true, coordinatorWorkspace: true, coordinatorCanDelegate: true }))
+      .toContain("you may name the active agent in this company best suited");
     expect(buildPaperclipTaskMarkdown({ issue, nativeRunner: false, coordinatorWorkspace: true }))
       .not.toContain("Coordinator task proposals:");
   });
