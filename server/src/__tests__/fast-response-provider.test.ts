@@ -147,6 +147,7 @@ describe("fast response provider", () => {
       model: "test-model",
       max_tokens: 256,
       provider: { sort: "latency" },
+      reasoning: { effort: "minimal", exclude: true },
     });
     expect(body.tools).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(1);

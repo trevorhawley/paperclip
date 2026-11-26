@@ -32,6 +32,16 @@ const editable = (s: FastResponseSettings): UpdateFastResponse => ({
   allowSponsored: s.allowSponsored,
 });
 
+/** Fast responses must answer within seconds: hide batch (deferred) models,
+ * put known-fast picks first, then sort the rest by ID. */
+const RECOMMENDED_FAST_MODELS = ["anthropic/claude-haiku-5.5", "google/gemini-3.8-flash", "openai/gpt-5.4-mini", "claude-haiku-5-5", "gpt-5.4-mini"];
+export function orderFastResponseModels<T extends { id: string; label?: string }>(models: readonly T[]): T[] {
+  const usable = models.filter(model => !/:batch$/i.test(model.id));
+  const rank = (id: string) => { const i = RECOMMENDED_FAST_MODELS.indexOf(id); return i === -1 ? Infinity : i; };
+  return [...usable].sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id))
+    .map(model => rank(model.id) === Infinity ? model : { ...model, label: `Recommended · ${model.label ?? model.id}` });
+}
+
 export function FastResponseSettingsView({
   settings,
   choices,
@@ -173,13 +183,13 @@ export function FastResponseSettingsView({
               id={`${modelListId}-input`}
               list={modelListId}
               value={draft.model ?? ""}
-              placeholder="Choose or enter a model ID"
+              placeholder="Type to search models, e.g. haiku"
               onChange={(e) =>
                 setDraft((d) => ({ ...d, model: e.target.value || null }))
               }
             />
             <datalist id={modelListId}>
-              {models.map((m) => (
+              {orderFastResponseModels(models).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label ?? m.id}
                 </option>
