@@ -34,7 +34,7 @@ type WorktreeRunExecutionDisplayState =
  * copied/legacy row is arming execution. The derived fields are display-only —
  * the PATCH the toggle sends still writes just the boolean.
  */
-function resolveWorktreeRunExecutionDisplayState(
+export function resolveWorktreeRunExecutionDisplayState(
   settings:
     | Pick<
         InstanceExperimentalSettings,
