@@ -136,7 +136,13 @@ function dependencyRetryWaitMessage(dependencies: RetryDependencies): string {
 // assigned-task liveness sweep admits it once the hold clears; no Retry needed.
 const admissionWaitMessages: Record<string, string> = {
   "budget.blocked": "Waiting for the budget to allow new work. The task starts automatically when it does.",
+  // A git-worktree preview refuses every run until an operator opts in; say so
+  // instead of leaving the task or chat silently "Queued".
+  "heartbeat.scheduling_suppressed": "Agent runs are switched off on this instance, so nothing will start. Turn on \"Run tasks in this worktree\" in Settings → Experimental, then send the message again.",
+  "heartbeat.worktree_execution_cutoff": "This was created before agent runs were turned on for this instance, so it stays parked. Start a new chat or create a new task to run it.",
 };
+/** Holds that stop work whatever the task's status (a chat stays in progress). */
+const statusIndependentAdmissionReasons = new Set(["heartbeat.scheduling_suppressed", "heartbeat.worktree_execution_cutoff"]);
 
 /** Recognize old persisted failures without displaying arbitrary run error text. */
 function deniedProjectId(issue: ProjectionIssue, run?: ProjectionRun): string | null | undefined {
@@ -156,7 +162,8 @@ export function projectTaskInterruption(issue: ProjectionIssue, input: Projectio
   if (!run) {
     const admission = input.admissionWait;
     if (!admission || admission.status !== "skipped" || !Object.hasOwn(admissionWaitMessages, admission.reason ?? "")
-        || issue.status !== "todo" || admission.agentId !== issue.assigneeAgentId) return null;
+        || (issue.status !== "todo" && !(statusIndependentAdmissionReasons.has(admission.reason ?? "") && !["done", "cancelled"].includes(issue.status)))
+        || admission.agentId !== issue.assigneeAgentId) return null;
     const waiting: TaskInterruptionPresentation = { intentId: admission.id, responsibility: "system", state: "working",
       nextRetryAt: null, canRetry: false, userAction: null, sourceRunIds: [], observedRunId: null };
     // Budget pauses, ordinary pauses and approvals wait on a person; only an
@@ -296,7 +303,7 @@ export async function taskInterruptionPresentations(db: Db, companyId: string, i
   const isRetryWait = sql<boolean>`coalesce(jsonb_typeof(${agentWakeupRequests.payload}#>'{taskRetry,sourceRunId}') = 'string', false)`;
   const agentIds = selected.flatMap(issue => issue.assigneeAgentId ? [issue.assigneeAgentId] : []);
   const projectIds = selected.flatMap(issue => issue.projectId ? [issue.projectId] : []);
-  const startingIssueIds = selected.filter(issue => issue.status === "todo" && issue.assigneeAgentId).map(issue => issue.id);
+  const startingIssueIds = selected.filter(issue => ["todo", "in_progress", "in_review"].includes(issue.status) && issue.assigneeAgentId).map(issue => issue.id);
   const [runs, waits, agentRows, projectRows, pauseRows, approvalRows, companyRows, admissionWaits] = await Promise.all([
     db.select({ issueId: requestedIssueId, id: heartbeatRuns.id, status: heartbeatRuns.status,
       createdAt: heartbeatRuns.createdAt, finishedAt: heartbeatRuns.finishedAt, agentId: heartbeatRuns.agentId, companyId: heartbeatRuns.companyId,

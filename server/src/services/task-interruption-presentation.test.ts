@@ -56,6 +56,17 @@ describe("never-started task refused by admission", () => {
       responsibility: "system", state: "working", canRetry: false,
       retryWait: { reason: "budget.blocked", message: expect.stringContaining("starts automatically") } });
   });
+  it("says agent runs are switched off instead of a silent Queued, for chats too", () => {
+    const suppressed = { ...admissionWait, reason: "heartbeat.scheduling_suppressed" };
+    for (const status of ["todo", "in_progress", "in_review"]) {
+      expect(projectTaskInterruption({ ...issue, status }, { agent, admissionWait: suppressed, paused: false, approval: false })).toMatchObject({
+        state: "working", retryWait: { reason: "heartbeat.scheduling_suppressed", message: expect.stringContaining("switched off") } });
+    }
+    expect(projectTaskInterruption({ ...issue, status: "done" }, { agent, admissionWait: suppressed, paused: false, approval: false })).toBeNull();
+    expect(projectTaskInterruption({ ...issue, status: "in_progress" }, { agent, admissionWait: { ...admissionWait, reason: "heartbeat.worktree_execution_cutoff" }, paused: false, approval: false }))
+      .toMatchObject({ retryWait: { reason: "heartbeat.worktree_execution_cutoff", message: expect.stringContaining("Start a new chat") } });
+    expect(projectTaskInterruption({ ...issue, status: "in_progress" }, { agent, admissionWait, paused: false, approval: false })).toBeNull();
+  });
   it("keeps pauses and budget stops as user actions instead of promising an automatic start", () => {
     for (const [state, action] of [
       [{ project: { pausedAt: new Date(), pauseReason: null } }, "resume"],
