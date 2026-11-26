@@ -120,6 +120,8 @@ export interface ExecutionReconciliation {
 export interface TaskInterruptionPresentation {
   providerFailure?: import("../provider-failure.generated.js").ProviderFailure;
   workspaceFailure?: { message: string };
+  /** A known, fixable reason the attempt could not start (plain-language, no raw error text). */
+  runFailure?: { reason: "skill_unavailable" };
   /** A persisted Retry admission wait, normalized to public text by the server. */
   retryWait?: { reason: string; message: string };
   intentId: string | null;

@@ -8195,7 +8195,13 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
               issueId={issue.id} agentName={agentMap.get(issue.assigneeAgentId ?? "")?.name} projectName={issue.project?.name}
               canRetry={canResolveBoardRecoveryAction && !(issue.executionBlocker?.workspaceRepairRequired
                 && isRetainedWorkspaceExportCause(issue.executionBlocker.cause) && retainedRecoveryOwnsRetry)} onRetry={taskRetry.retry}
-              optimistic={taskRetry.optimistic} takingLonger={taskRetry.takingLonger} error={taskRetry.error} />
+              optimistic={taskRetry.optimistic} takingLonger={taskRetry.takingLonger} error={taskRetry.error}
+              agentSkillsHref={issue.assigneeAgentId ? `/agents/${issue.assigneeAgentId}/skills` : undefined}
+              onResetSession={issue.conversationAgentId ? () => {
+                // "/new" is the chat's own reset: a fresh session with the same agent.
+                void issuesApi.addComment(issue.id, "/new", undefined, undefined, undefined, crypto.randomUUID())
+                  .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.issues.detail(issue.id) }));
+              } : undefined} />
           )}
 
           {issue.status === "in_review" && issue.externalConversationState === "waiting" && (
