@@ -116,7 +116,7 @@ describe("resolveCommandContext", () => {
 
     delete process.env.PAPERCLIP_API_URL;
     expect(resolveApiBase({ config: configPath }, { apiBase: "http://profile:2/" })).toBe("http://profile:2");
-    expect(resolveApiBase({ config: configPath }, {})).toBe("http://localhost:4111");
+    expect(resolveApiBase({ config: configPath }, {})).toBe("http://127.0.0.1:4111");
   });
 
   it("prefers explicit and env tokens over profile env and stored board auth", () => {
