@@ -1,3 +1,4 @@
+import { findPendingChatMessages } from "../services/resume-pending-chat-messages.js";
 import { assertProviderApiPlacementPolicy, managedCursorApiDefaultEnabled, resolveProviderApiPlacement } from "../services/native-runtime/provider-api-placement.js";
 import { isObjectJournalBusyError } from "../services/object-byte-journal.js";
 import { readTaskPanelActivations } from "../services/plugin-task-panels.js";
@@ -5913,6 +5914,27 @@ export function agentRoutes(
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
       return;
+    }
+
+    // Messages sent to the chat while paused never woke the agent; answer them now.
+    const pendingChats = await findPendingChatMessages(db, {
+      companyId: agent.companyId, agentId: agent.id, pausedAt: existing.pausedAt ? new Date(existing.pausedAt) : null,
+    }).catch((err) => { logger.warn({ err, agentId: agent.id }, "failed to find chat messages sent while paused"); return []; });
+    const resumeActor = getActorInfo(req);
+    for (const pending of pendingChats) {
+      await heartbeat.wakeup(agent.id, {
+        source: "automation",
+        triggerDetail: "system",
+        reason: "issue_commented",
+        payload: { issueId: pending.issueId, commentId: pending.commentId, mutation: "comment" },
+        idempotencyKey: `agent-resumed:${pending.commentId}`,
+        requestedByActorType: resumeActor.actorType,
+        requestedByActorId: resumeActor.actorId,
+        contextSnapshot: {
+          issueId: pending.issueId, taskId: pending.issueId, commentId: pending.commentId,
+          wakeCommentId: pending.commentId, source: "agent.resumed", wakeReason: "issue_commented",
+        },
+      }).catch((err) => logger.warn({ err, agentId: agent.id, issueId: pending.issueId }, "failed to wake agent for a chat message sent while paused"));
     }
 
     const actor = getActorInfo(req);

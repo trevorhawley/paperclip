@@ -11,6 +11,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { Link, useParams } from "@/lib/router";
 import { agentRouteRef } from "@/lib/utils";
 import { TaskDetailSurface } from "./IssueDetail";
+import { PausedAgentChatNotice } from "@/components/PausedAgentChatNotice";
 import { isUuidLike, type Issue } from "@paperclipai/shared";
 
 export function AgentChat() {
@@ -117,9 +118,12 @@ export function AgentChat() {
       <p className="text-sm text-muted-foreground">Loading conversation…</p>
     );
   return (
-    <TaskDetailSurface
-      key={`${agent.id}:${userId}`}
-      conversation={{ agent, issue: chat.data ?? null, ensureIssue }}
-    />
+    <>
+      <PausedAgentChatNotice agent={agent} />
+      <TaskDetailSurface
+        key={`${agent.id}:${userId}`}
+        conversation={{ agent, issue: chat.data ?? null, ensureIssue }}
+      />
+    </>
   );
 }
