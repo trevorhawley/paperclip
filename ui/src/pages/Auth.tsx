@@ -81,7 +81,7 @@ export function AuthPage() {
       navigate(nextPath, { replace: true });
     },
     onError: (err) => {
-      setError(describeError(err).body);
+      setError(signInErrorMessage(err, describeError(err).body));
     },
   });
 
@@ -245,4 +245,16 @@ export function AuthPage() {
       </div>
     </div>
   );
+}
+
+/** "Invalid origin" looks like a wrong password unless we say what it means:
+ * the page was opened on an address Paperclip does not trust for sign-in. */
+export function signInErrorMessage(err: unknown, fallback: string, location: Pick<Location, "hostname" | "href"> = window.location): string {
+  const code = (err as { code?: unknown } | null)?.code;
+  const text = `${typeof code === "string" ? code : ""} ${fallback}`;
+  if (!/INVALID_ORIGIN|invalid origin/i.test(text)) return fallback;
+  if (location.hostname === "localhost") {
+    return `Your password wasn't checked: this address isn't trusted for sign-in. Open ${location.href.replace("//localhost", "//127.0.0.1")} instead.`;
+  }
+  return "Your password wasn't checked: this address isn't trusted for sign-in. Open Paperclip at the address you normally use (for a local install, http://127.0.0.1:3100).";
 }
