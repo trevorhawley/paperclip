@@ -33,6 +33,7 @@ import { CoordinatorTaskMotion } from "./CoordinatorTaskCommitment";
 import { CoordinatorWorkList, coordinatorWorkViews, type CoordinatorWorkStatus } from "./CoordinatorWorkList";
 
 import { CoordinatorInboxOverview } from "./CoordinatorInboxOverview";
+import { InboxSetupIssues } from "./InboxSetupIssues";
 
 type Group = "none" | "task" | "agent" | "project";
 
@@ -234,6 +235,7 @@ export function CoordinatorNeedsYou() {
       ))}
     </div>
     {view !== "pending" ? <CoordinatorWorkList key={`${selectedCompanyId}:${userId}:${view}`} companyId={selectedCompanyId} userId={userId} status={view} /> : <>
+    {overview && <InboxSetupIssues companyId={selectedCompanyId} agents={agentQuery.data ?? []} />}
     {overview && <h2 className="text-sm font-semibold">Decisions requiring attention</h2>}
     <div hidden={overview} data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
       <ToolbarSearch query={query} onQueryChange={setQuery} label="Search decisions" placeholder="Search decisions or task IDs…" />
