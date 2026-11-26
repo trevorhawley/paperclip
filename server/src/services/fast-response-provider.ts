@@ -206,10 +206,8 @@ export async function runFastResponseProvider(
               }
             : !route && input.metadata.provider === "xai"
               ? { xai: { reasoningEffort: "low" } }
-              : !route &&
-                  input.metadata.provider === "openai" &&
-                  /^(?:gpt-5|gpt-6|o[134])/.test(input.model)
-                ? { openai: { reasoningEffort: "low" } }
+              : !route && input.metadata.provider === "openai" && openAiFastReasoningEffort(input.model)
+                ? { openai: { reasoningEffort: openAiFastReasoningEffort(input.model)! } }
                 : {};
     const result = await generateText({
       model,
@@ -340,4 +338,15 @@ export async function runFastResponseProvider(
             : "provider_failed",
     };
   }
+}
+
+/** The lowest reasoning effort each OpenAI reasoning family accepts. A fast
+ * acknowledgement has a three-second budget, so "low" is too slow: GPT-5
+ * (incl. mini/nano) accepts "minimal" and GPT-5.1+ accepts "none". */
+export function openAiFastReasoningEffort(model: string): "none" | "minimal" | "low" | null {
+  const id = model.replace(/^openai\//, "");
+  if (/^gpt-5\.\d/.test(id)) return "none";
+  if (/^gpt-5(?:$|-)/.test(id)) return "minimal";
+  if (/^(?:gpt-6|o[134])/.test(id)) return "low";
+  return null;
 }
