@@ -14,6 +14,16 @@ Every screen and every row must answer three questions in a split second, withou
 
 If a row can't answer these, fix the data or the row, or remove the screen.
 
+## Principle: nothing blocks silently
+
+Trevor, 2026-11-26: hidden blockers (a paused agent, a run lock buried in experimental settings) cause "hours of endless frustration". Any state that stops work must:
+
+- **say so where the person is looking**: on the chat, task or agent itself, not only in settings or logs;
+- **say why in plain words**: "Launch Helper is paused", "This instance can't run agents";
+- **offer the fix one click away**: Resume, turn on, connect, raise budget, or a link to the exact setting.
+
+Silent waiting states ("Queued" with no reason) count as bugs. Review every PR against this.
+
 ## Rules
 
 1. **Rows before cards.** Lists of tasks, decisions, runs and history render as compact rows (≈32–40px, `py-1.5`, a hairline divider) rather than padded bordered cards. Use a card only when the item needs inline interaction such as a form or answer choices.
