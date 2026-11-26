@@ -54,6 +54,20 @@ import { createHeartbeatQueueTestDependencies } from "./helpers/heartbeat-queue.
     };
     return { companyId, agentId, sourceId, runId, task, create, finish, rows, due, wakeup, service, run };
   }
+  it("posts one zero-token system line in the chat when a handed-off task becomes blocked", async () => {
+    const f = await seed();
+    await issueService(db).update(f.task.id, { status: "blocked" });
+    const notices = await db.select().from(issueComments).where(and(eq(issueComments.issueId, f.sourceId), eq(issueComments.authorType, "system")));
+    expect(notices).toHaveLength(1);
+    expect(notices[0].body).toContain(f.task.title);
+    expect(notices[0].body).toContain("is blocked and needs attention");
+    expect(f.wakeup).not.toHaveBeenCalled();
+    expect(await f.rows()).toHaveLength(0);
+    await db.update(issues).set({ conversationSessionGeneration: 1 }).where(eq(issues.id, f.sourceId));
+    await issueService(db).update(f.task.id, { status: "todo" });
+    await issueService(db).update(f.task.id, { status: "blocked" });
+    expect(await db.select().from(issueComments).where(and(eq(issueComments.issueId, f.sourceId), eq(issueComments.authorType, "system")))).toHaveLength(1);
+  });
   it("supplies canonical human output verdicts without copying review prose or unrelated approvals", async () => {
     const f = await seed(), reviewId = randomUUID(), revisionId = randomUUID();
     await db.insert(issueThreadInteractions).values([
