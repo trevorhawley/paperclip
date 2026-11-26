@@ -3,6 +3,7 @@ import type { AiConnectionMetadata } from "@paperclipai/shared";
 import {
   fastResponsePrompt,
   fastResponseReceipt,
+  openAiFastReasoningEffort,
   runFastResponseProvider,
 } from "../services/fast-response-provider.js";
 const ack =
@@ -85,6 +86,15 @@ const connections: AiConnectionMetadata[] = [
   })),
 ];
 describe("fast response provider", () => {
+  it("sends the lowest reasoning effort each OpenAI family accepts", () => {
+    expect(openAiFastReasoningEffort("gpt-5-nano")).toBe("minimal");
+    expect(openAiFastReasoningEffort("gpt-5-mini")).toBe("minimal");
+    expect(openAiFastReasoningEffort("gpt-5")).toBe("minimal");
+    expect(openAiFastReasoningEffort("gpt-5.4-mini")).toBe("none");
+    expect(openAiFastReasoningEffort("openai/gpt-5.1")).toBe("none");
+    expect(openAiFastReasoningEffort("o4-mini")).toBe("low");
+    expect(openAiFastReasoningEffort("gpt-4.1-mini")).toBeNull();
+  });
   it("rejects copied JSON output while retaining the provider charge", async () => {
     const body = chatResponse();
     body.choices[0].message.content = '{"message":"I’ll check the border."}';
