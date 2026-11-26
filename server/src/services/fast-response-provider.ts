@@ -131,7 +131,8 @@ export function fastResponseModel(
   )
     return createOpenRouter({ ...common, apiKey: credential }).chat(model, {
       extraBody: { provider: { sort: "latency" } },
-      reasoning: { effort: "low", exclude: true },
+      // A fast acknowledgement has a 3s budget; thinking first misses it.
+      reasoning: { effort: "minimal", exclude: true },
       usage: { include: true },
     });
   if (

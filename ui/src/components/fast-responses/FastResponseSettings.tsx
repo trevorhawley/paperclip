@@ -173,13 +173,13 @@ export function FastResponseSettingsView({
               id={`${modelListId}-input`}
               list={modelListId}
               value={draft.model ?? ""}
-              placeholder="Choose or enter a model ID"
+              placeholder="Type to search models, e.g. haiku"
               onChange={(e) =>
                 setDraft((d) => ({ ...d, model: e.target.value || null }))
               }
             />
             <datalist id={modelListId}>
-              {models.map((m) => (
+              {[...models].sort((a, b) => a.id.localeCompare(b.id)).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label ?? m.id}
                 </option>
