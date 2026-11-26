@@ -25,7 +25,7 @@ type IssueContext = NonNullable<Awaited<ReturnType<RunPreparation["getIssueExecu
 
 export interface HeartbeatTaskContextInput {
   run: Pick<typeof heartbeatRuns.$inferSelect, "id">;
-  agent: Pick<typeof agents.$inferSelect, "id" | "companyId" | "adapterType">;
+  agent: Pick<typeof agents.$inferSelect, "id" | "companyId" | "adapterType"> & Partial<Pick<typeof agents.$inferSelect, "metadata">>;
   task: {
     issueRef: Pick<IssueContext,
       "id" | "identifier" | "title" | "status" | "priority" | "workMode" |
@@ -241,6 +241,8 @@ export async function prepareHeartbeatTaskContext(db: Db, input: HeartbeatTaskCo
   context.paperclipCoordinatorWorkspaceEnabled = Boolean(coordinatorWorkspace);
   const taskMarkdownInput = {
     coordinatorWorkspace: Boolean(coordinatorWorkspace),
+    // Opt-in per agent (agent metadata), set by the board on the agent page.
+    coordinatorCanDelegate: Boolean(coordinatorWorkspace) && (agent.metadata as Record<string, unknown> | null | undefined)?.canDelegate === true,
     conferenceRoomEnabled: experimentalInstanceSettings.enableConferenceRoomChat === true,
     conversationConfirmations: issueRef && isConversation(issueContext)
       ? await getConversationConfirmationContext({ db, companyId: agent.companyId, issueId: issueRef.id, agentId: agent.id })

@@ -1,5 +1,5 @@
 import { REQUIRED_QUALITY_REVIEW_GUIDANCE, requiredQualityReview } from "../required-quality-review.js";
-import { AGENT_CHAT_DIRECTIVE, CONFERENCE_ROOM_CHAT_DIRECTIVE, COORDINATOR_CHAT_HANDOFF_DIRECTIVE, COORDINATOR_CHAT_STYLE_DIRECTIVE } from "../agent-conversations.js";
+import { AGENT_CHAT_DIRECTIVE, CONFERENCE_ROOM_CHAT_DIRECTIVE, COORDINATOR_CHAT_HANDOFF_DIRECTIVE, COORDINATOR_CHAT_STYLE_DIRECTIVE, COORDINATOR_DELEGATION_DIRECTIVE } from "../agent-conversations.js";
 import { publicChatTaskUrl } from "../chat-task-url.js";
 import { slackChatAgentGuidance } from "../connectors/slack/agent-guidance.js";
 import type { ConversationConfirmationContext } from "../conversation-confirmation-context.js";
@@ -67,6 +67,7 @@ export function buildPaperclipTaskMarkdown(input: {
   slackCommand?: string | null;
   nativeRunner?: boolean;
   coordinatorWorkspace?: boolean;
+  coordinatorCanDelegate?: boolean;
   conferenceRoomEnabled?: boolean;
   // false builds the compact variant used for resume deltas, where the session
   // already received the description with the assignment.
@@ -224,6 +225,7 @@ export function buildPaperclipTaskMarkdown(input: {
       if (input.nativeRunner && input.coordinatorWorkspace) {
         lines.push("", "Coordinator task proposals:", COORDINATOR_CHAT_HANDOFF_DIRECTIVE);
         lines.push("", "Coordinator reply style:", COORDINATOR_CHAT_STYLE_DIRECTIVE);
+        if (input.coordinatorCanDelegate) lines.push("", "Delegation:", COORDINATOR_DELEGATION_DIRECTIVE);
       }
       if (input.conferenceRoomEnabled) lines.push("", "Conference Room:", CONFERENCE_ROOM_CHAT_DIRECTIVE);
       if (input.conversationConfirmations?.cards.length) {

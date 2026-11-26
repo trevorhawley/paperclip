@@ -1,4 +1,5 @@
 import { AgentStatusControl } from "@/components/AgentStatusControl";
+import { AgentDelegationToggle } from "@/components/AgentDelegationToggle";
 import { describeError } from "../api/errors";
 import { useSelectedHeartbeatRun } from "../hooks/useSelectedHeartbeatRun";
 import { grokBotApi } from "@/api/grokBot";
@@ -922,7 +923,8 @@ export function AgentDetail() {
               onSave={(name) => saveHeaderField({ name })}
             />
           </div>
-          <div className="mt-1.5"><AgentStatusControl agent={currentAgent} refs={[routeAgentRef, agentLookupRef].filter((ref): ref is string => !!ref)} /></div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2"><AgentStatusControl agent={currentAgent} refs={[routeAgentRef, agentLookupRef].filter((ref): ref is string => !!ref)} />
+            <AgentDelegationToggle agent={currentAgent} refs={[routeAgentRef, agentLookupRef].filter((ref): ref is string => !!ref)} /></div>
           <AgentLifecycleStatus agent={currentAgent} refreshError={lifecycle.isError} onRetry={() => agentAction.mutate("retryLifecycle")} retryPending={agentAction.isPending} />
         </div>
         <AgentActionButtons
