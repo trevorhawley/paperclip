@@ -66,12 +66,38 @@ export async function recordChatCompletion(tx: Connection, before: Issue, after:
   if (before.status === after.status) return false;
   await tx.update(deliveries).set({ status: "superseded" }).where(and(eq(deliveries.taskId, after.id),
     eq(deliveries.companyId, after.companyId), inArray(deliveries.status, [...pending])));
+  if (after.status === "blocked") {
+    await recordChatBlockedNotice(tx, after);
+    return false;
+  }
   if (after.status !== "done") return false;
   const [handoff] = await tx.select().from(handoffs).where(and(eq(handoffs.taskId, after.id), eq(handoffs.companyId, after.companyId)));
   if (!handoff) return false;
   await notifyDeliveryWork(tx, DELIVERY_QUEUES.chatCompletion);
   await tx.insert(deliveries).values({ companyId: after.companyId, taskId: after.id, statusVersion: after.statusVersion }).onConflictDoNothing();
   return true;
+}
+
+/** A task handed off from a chat became blocked: post one system line in that
+ * chat so the person sees it there. This never wakes the chat agent, so it
+ * costs no tokens. Completion keeps its existing agent-written report. */
+export function chatBlockedNoticeBody(task: Pick<Issue, "identifier" | "title">): string {
+  const name = task.identifier ? `${task.identifier} · ${task.title}` : task.title;
+  const href = task.identifier ? `/issues/${task.identifier}` : null;
+  return `${href ? `[${name}](${href})` : name} is blocked and needs attention.`;
+}
+
+async function recordChatBlockedNotice(tx: Connection, task: Issue) {
+  const [handoff] = await tx.select().from(handoffs).where(and(eq(handoffs.taskId, task.id), eq(handoffs.companyId, task.companyId)));
+  if (!handoff) return;
+  const [source] = await tx.select().from(issues).where(and(eq(issues.id, handoff.conversationId), eq(issues.companyId, task.companyId)));
+  // A reset chat starts a new session; old handoffs no longer speak there.
+  if (!source?.conversationAgentId || source.conversationSessionGeneration !== handoff.sessionGeneration || source.hiddenAt) return;
+  await tx.insert(issueComments).values({
+    companyId: task.companyId, issueId: source.id, authorType: "system",
+    conversationSessionGeneration: source.conversationSessionGeneration,
+    body: chatBlockedNoticeBody(task),
+  });
 }
 
 async function loadAudience(tx: Connection, deliveryId: string) {
