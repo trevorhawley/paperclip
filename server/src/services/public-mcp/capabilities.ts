@@ -201,6 +201,32 @@ export const publicMcpCapabilities: Capability[] = [
       url: origin + "/" + pathId(p.company.issuePrefix) + "/approvals/" + pathId(object(v).id),
     })) }),
   },
+  {
+    // The front door's cheapest useful call: one small read answers "what's on?"
+    // so a low-cost chat model can brief the person without many tool calls.
+    name: "paperclip_whats_on", description: "One compact briefing of what needs the person and what is moving: decisions waiting on them, blocked work, work in progress, recently finished work, and setup problems such as paused or failing agents. Use it for \"what's on\", \"morning\" or \"status\" questions. Links open in Paperclip.",
+    schema: z.object({ ...company, limit: z.number().int().min(1).max(10).default(5) }).strict(),
+    run: async (p, a, api, origin) => {
+      const base = origin + "/" + pathId(p.company.issuePrefix);
+      const n = Number(a.limit ?? 5);
+      const task = (v: unknown) => ({ ...pick(v, ["identifier", "title", "status", "updatedAt"]), url: base + "/issues/" + pathId(object(v).identifier ?? object(v).id) });
+      const list = async (status: string) => rows(await api(p, "GET", `/companies/${a.companyId}/issues?status=${status}&view=index&sortField=updated&sortDir=desc&limit=${n}`)).slice(0, n).map(task);
+      const [attention, blocked, active, done, agents] = await Promise.all([
+        api(p, "GET", `/companies/${a.companyId}/attention?all=true`),
+        list("blocked"), list("in_progress"), list("done"),
+        api(p, "GET", `/companies/${a.companyId}/agents`),
+      ]);
+      const decisions = rows(object(attention).items);
+      return {
+        needsYou: { count: decisions.length, inboxUrl: base + "/decisions", items: decisions.slice(0, n).map(item => ({
+          title: object(object(item).subject).title ?? object(item).whyNow, kind: object(item).sourceKind,
+          task: object(object(item).relatedIssue).identifier ?? null })) },
+        blocked, inProgress: active, recentlyDone: done,
+        setupIssues: rows(agents).filter(agent => ["paused", "error"].includes(String(object(agent).status)))
+          .map(agent => ({ agent: object(agent).name, status: object(agent).status, pauseReason: object(agent).pauseReason ?? null })),
+      };
+    },
+  },
   ...expandedMcpCapabilities, ...fileTransferCapabilities,
 ];
 
