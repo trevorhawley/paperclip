@@ -30,10 +30,13 @@ export interface AgentConversationSidebarProps {
   onRetryHistory?: () => void;
   onCreateAgent?: () => void;
   renderAgentAction?: (agent: Agent) => ReactNode;
+  /** Agents you have a chat with, most recent first. Enables the Chats | Agents tabs. */
+  conversationAgentIds?: readonly string[];
+  chatMeta?: Record<string, { projectName: string | null; updatedAt: string }>;
 }
 
 /** Searchable navigation for one conversation per agent. */
-export function AgentConversationSidebar({ agents, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction }: AgentConversationSidebarProps) {
+export function AgentConversationSidebar({ agents, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, conversationAgentIds, chatMeta = {} }: AgentConversationSidebarProps) {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState(initialSearch);
@@ -41,7 +44,14 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
   const headingId = useId();
   const unreadIds = useMemo(() => new Set(unreadAgentIds), [unreadAgentIds]);
   const query = search.trim().toLocaleLowerCase();
-  const visible = agents.filter(agent => `${agent.name} ${agent.title ?? ""} ${agent.role}`.toLocaleLowerCase().includes(query));
+  const tabbed = conversationAgentIds !== undefined;
+  // Until the person picks a tab, show Chats whenever there are any (they load after mount).
+  const [chosenTab, setTab] = useState<"chats" | "agents" | null>(null);
+  const tab = chosenTab ?? (conversationAgentIds?.length ? "chats" : "agents");
+  const chatIds = new Set(conversationAgentIds ?? []);
+  // Agents keeps the full eligible list (open chat, then recent chats, then A–Z).
+  const pool = !tabbed || tab === "agents" ? agents : agents.filter(agent => chatIds.has(agent.id));
+  const visible = pool.filter(agent => `${agent.name} ${agent.title ?? ""} ${agent.role} ${chatMeta[agent.id]?.projectName ?? ""}`.toLocaleLowerCase().includes(query));
   function focusSearch() {
     setSearch("");
     searchRef.current?.focus();
@@ -57,6 +67,16 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         {search && <Button variant="ghost" size="icon-xs" aria-label="Clear search" className="absolute right-1 top-1/2 -translate-y-1/2" onClick={focusSearch}><X className="size-3" /></Button>}
       </div>
     </div>
+    {tabbed && <div className="flex shrink-0 flex-col gap-1 px-3 pb-2">
+      <Button variant="outline" size="sm" className="justify-start gap-2" onClick={() => setPickerOpen(true)}><Plus className="size-4" />New chat</Button>
+      <div role="tablist" aria-label="Chat lists" className="flex gap-1">
+        {(["chats", "agents"] as const).map(value => <button key={value} type="button" role="tab" aria-selected={tab === value}
+          onClick={() => setTab(value)}
+          className={cn("flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors", tab === value ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/60")}>
+          {value === "chats" ? `Chats${conversationAgentIds?.length ? ` · ${conversationAgentIds.length}` : ""}` : "Agents"}
+        </button>)}
+      </div>
+    </div>}
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 scrollbar-auto-hide">
       <span role="status" className="sr-only">{loading ? "Loading agents" : `${visible.length} ${visible.length === 1 ? "agent" : "agents"}`}</span>
       {historyLoading && <p role="status" className="px-2 text-xs text-muted-foreground">Loading chat history…</p>}
@@ -77,11 +97,14 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
           aria-current={activeId === agent.id ? "page" : undefined}
           title={`${agent.name}${agent.title ? ` · ${agent.title}` : ""}`}
           onClick={event => { if (onSelect) { event.preventDefault(); onSelect(agent); } }}
-          className={cn("agent-contact-row flex min-w-0 items-center gap-3 rounded-md px-2.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", renderAgentAction && hasUnread && "pr-12", activeId === agent.id ? "bg-accent text-accent-foreground" : "group-hover/agent-pin:bg-accent/60 group-focus-within/agent-pin:bg-accent/60")}>
-          <AgentAvatar agent={agent} size={40} />
+          className={cn("agent-contact-row flex min-w-0 items-center gap-3 rounded-md px-2.5 text-left", tabbed ? "py-2" : "py-3", " transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", renderAgentAction && hasUnread && "pr-12", activeId === agent.id ? "bg-accent text-accent-foreground" : "group-hover/agent-pin:bg-accent/60 group-focus-within/agent-pin:bg-accent/60")}>
+          <AgentAvatar agent={agent} size={tabbed ? 32 : 40} />
           <span className="agent-pin-text flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-sm font-medium">{agent.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{agent.status === "terminated" ? "Terminated" : agent.title ?? agent.role}</span>
+            <span className="truncate text-xs text-muted-foreground">{agent.status === "terminated" ? "Terminated"
+              : tabbed && tab === "chats" && chatMeta[agent.id]
+                ? [chatMeta[agent.id].projectName, formatChatTime(chatMeta[agent.id].updatedAt)].filter(Boolean).join(" · ") || (agent.title ?? agent.role)
+                : agent.title ?? agent.role}</span>
           </span>
           {unreadCount > 0 ? <Badge variant="ghost" aria-label={`${unreadCount} unread ${unreadCount === 1 ? "message" : "messages"} from ${agent.name}`} className="shrink-0 bg-primary font-mono tabular-nums text-primary-foreground">{unreadCount}</Badge>
             : unreadIds.has(agent.id) && <span role="img" aria-label={`Unread messages from ${agent.name}`} className="size-2 shrink-0 rounded-full bg-primary" />}
@@ -115,4 +138,14 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         if (!signal?.aborted) setSearch("");
       }} />
   </aside>;
+}
+
+function formatChatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const minutes = Math.round((Date.now() - date.getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }

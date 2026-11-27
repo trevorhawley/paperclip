@@ -5,7 +5,8 @@ import { useAgentChatNavigation, useOpenAgentChat } from "@/hooks/useAgentChatNa
 import { useLocation, useNavigate } from "@/lib/router";
 import { useSidebar } from "@/context/SidebarContext";
 import { agentRouteRef } from "@/lib/utils";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { projectsApi } from "@/api/projects";
 import { agentsApi } from "@/api/agents";
 import { queryKeys } from "@/lib/queryKeys";
 import { resourceMembershipState, useResourceMemberships } from "@/hooks/useResourceMemberships";
@@ -58,10 +59,18 @@ export function AgentConversationsSidebar() {
     .filter(agent => !listedIds.has(agent.id) && agent.status !== "terminated"
       && (!memberships.isSuccess || resourceMembershipState(memberships.data, "agent", agent.id) !== "left"))
     .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+  const projects = useQuery({ queryKey: queryKeys.projects.list(companyId!), queryFn: () => projectsApi.list(companyId!), enabled: !!companyId });
+  const projectNames = new Map((projects.data ?? []).map(project => [project.id, project.name]));
+  // Each chat row says who it's with, which project, and when it last moved.
+  const chatMeta = Object.fromEntries((chats.data ?? []).flatMap(chat => chat.conversationAgentId ? [[chat.conversationAgentId, {
+    projectName: chat.projectId ? projectNames.get(chat.projectId) ?? null : null,
+    updatedAt: String(chat.updatedAt),
+  }]] : []));
   const previews = Object.fromEntries((chats.data ?? []).filter(chat => chat.conversationState === "active")
     .map(chat => [chat.conversationAgentId!, "Working…"]));
   return <AgentConversationSidebar key={`${companyId}:${userId}`} agents={[...conversations, ...teammates]} availableAgents={roster}
     existingChatAgentIds={existingChatAgentIds}
+    conversationAgentIds={conversations.map(agent => agent.id)} chatMeta={chatMeta}
     activeId={active?.id} previews={previews}
     unreadAgentIds={unreadAgentIds}
     unreadMessageCounts={unreadMessageCounts}
