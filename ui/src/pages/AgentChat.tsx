@@ -12,6 +12,7 @@ import { Link, useParams } from "@/lib/router";
 import { agentRouteRef } from "@/lib/utils";
 import { TaskDetailSurface } from "./IssueDetail";
 import { PausedAgentChatNotice } from "@/components/PausedAgentChatNotice";
+import { ChatDetailsLine } from "@/components/ChatDetailsLine";
 import { Button } from "@/components/ui/button";
 import { issuesApi } from "@/api/issues";
 import { isUuidLike, type Issue } from "@paperclipai/shared";
@@ -122,14 +123,14 @@ export function AgentChat() {
   return (
     <>
       <div className="mx-auto mb-1 flex w-full max-w-3xl items-start gap-2">
-        <div className="min-w-0 flex-1"><PausedAgentChatNotice agent={agent} /></div>
-        {chat.data ? <Button size="sm" variant="ghost" className="shrink-0" title="Start a fresh session with this agent. Earlier messages stay visible."
+        <div className="min-w-0 flex-1 space-y-1"><ChatDetailsLine agent={agent} chat={chat.data ?? null} /><PausedAgentChatNotice agent={agent} /></div>
+        {chat.data ? <Button size="sm" variant="ghost" className="shrink-0" title="Start a fresh session with this agent. Earlier messages stay visible; the agent starts with a clean slate."
           onClick={() => {
             const issueId = chat.data!.id;
             // "/new" is the chat's built-in reset: same agent, fresh session.
             void issuesApi.addComment(issueId, "/new", undefined, undefined, undefined, crypto.randomUUID())
               .then(() => client.invalidateQueries({ queryKey: queryKeys.issues.detail(issueId) }));
-          }}>New chat</Button> : null}
+          }}>Start fresh</Button> : null}
       </div>
       <TaskDetailSurface
         key={`${agent.id}:${userId}`}

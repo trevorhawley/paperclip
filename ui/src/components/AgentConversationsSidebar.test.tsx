@@ -58,8 +58,14 @@ beforeEach(() => {
   container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); vi.unstubAllGlobals(); });
+async function showAgentsTab() {
+  const tab = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(button => button.textContent === "Agents");
+  if (tab && tab.getAttribute("aria-selected") !== "true") await act(async () => tab.click());
+}
+
 it("opens every contact without creating a conversation before the first message", async () => {
   await render();
+  await showAgentsTab();
   expect(container.querySelectorAll('nav[aria-label="Agent conversations"] a')).toHaveLength(2);
   expect(container.querySelector('[aria-label="Add chat"]')).toBeNull();
   expect(container.querySelector('[aria-label="Search chats"]')).not.toBeNull();
@@ -73,6 +79,7 @@ it("opens every contact without creating a conversation before the first message
 });
 it("opens the existing create-agent dialog and persists a company-scoped chat pin", async () => {
   await render();
+  await showAgentsTab();
   await act(async () => [...container.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Create a new agent")!.click());
   expect(state.newAgent).toHaveBeenCalledOnce();
   await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Pin bob"]')!.click());
@@ -216,9 +223,21 @@ it("lists every eligible agent: open chat, then conversations by recency, then t
   client.setQueryData(queryKeys.agents.list("company-a"), [...more, ...roster]);
   client.setQueryData(queryKeys.agentChats.list("company-a", "user-a"), [chat("bob")]);
   await render();
+  await showAgentsTab();
   await vi.waitFor(async () => {
     await act(async () => {});
     expect([...container.querySelectorAll('nav[aria-label="Agent conversations"] a')].map(link => link.getAttribute("href")))
       .toEqual(["/chats/alice", "/chats/bob", "/chats/carol", "/chats/zed"]); // the open chat (alice) is pinned first
   });
+});
+
+it("shows recent chats with their project on the Chats tab, and everyone on Agents", async () => {
+  client.setQueryData(queryKeys.agentChats.list("company-a", "user-a"), [chat("bob")]);
+  await render();
+  const tabs = [...container.querySelectorAll('[role="tab"]')].map(tab => tab.textContent);
+  expect(tabs[0]).toMatch(/^Chats/);
+  expect(tabs[1]).toBe("Agents");
+  expect(container.textContent).toContain("New chat");
+  await showAgentsTab();
+  expect(container.querySelectorAll('nav[aria-label="Agent conversations"] a').length).toBeGreaterThanOrEqual(2);
 });
