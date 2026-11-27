@@ -8,7 +8,7 @@ import { useCompany } from "@/context/CompanyContext";
 import { useAgentChatEnabled } from "@/hooks/useAgentChatEnabled";
 import { recordAgentChatVisit } from "@/lib/recent-agent-chats";
 import { queryKeys } from "@/lib/queryKeys";
-import { Link, useParams } from "@/lib/router";
+import { Link, useParams, useSearchParams } from "@/lib/router";
 import { agentRouteRef } from "@/lib/utils";
 import { TaskDetailSurface } from "./IssueDetail";
 import { PausedAgentChatNotice } from "@/components/PausedAgentChatNotice";
@@ -19,6 +19,9 @@ import { isUuidLike, type Issue } from "@paperclipai/shared";
 
 export function AgentChat() {
   const { agentRef = "" } = useParams<{ agentRef: string }>();
+  // ?thread=<id> opens one thread; without it, the agent's most recent thread.
+  const [searchParams] = useSearchParams();
+  const threadId = searchParams.get("thread");
   const { selectedCompanyId } = useCompany();
   const { enabled, loaded } = useAgentChatEnabled();
   const client = useQueryClient();
@@ -44,13 +47,19 @@ export function AgentChat() {
       && !rosterAgent && isUuidLike(agentRef),
   });
   const agent = rosterAgent ?? (historyAgent.data?.companyId === selectedCompanyId ? historyAgent.data : undefined);
-  const chatKey = queryKeys.agentChats.detail(selectedCompanyId, userId, agent?.id);
+  const chatKey = threadId ? [...queryKeys.agentChats.detail(selectedCompanyId, userId, agent?.id), "thread", threadId] as const
+    : queryKeys.agentChats.detail(selectedCompanyId, userId, agent?.id);
   const chat = useQuery({
     queryKey: chatKey,
-    queryFn: () => agentChatsApi.get(selectedCompanyId!, agent!.id),
+    queryFn: async () => {
+      if (!threadId) return agentChatsApi.get(selectedCompanyId!, agent!.id);
+      const issue = await issuesApi.get(threadId);
+      return issue.conversationAgentId === agent!.id ? issue : null;
+    },
     initialData: () => enabled && agent && session.isSuccess
       ? client.getQueryData<Issue[]>(queryKeys.agentChats.list(selectedCompanyId, userId))
-        ?.find(issue => issue.companyId === selectedCompanyId && issue.conversationAgentId === agent?.id)
+        ?.find(issue => issue.companyId === selectedCompanyId && issue.conversationAgentId === agent?.id
+          && (!threadId || issue.id === threadId))
       : undefined,
     initialDataUpdatedAt: () => {
       const state = client.getQueryState(queryKeys.agentChats.list(selectedCompanyId, userId));
@@ -64,7 +73,7 @@ export function AgentChat() {
   const creating = useRef<Promise<Issue> | null>(null);
   useEffect(() => {
     creating.current = null;
-  }, [selectedCompanyId, userId, agent?.id]);
+  }, [selectedCompanyId, userId, agent?.id, threadId]);
   useEffect(() => {
     if (enabled && agent && session.isSuccess && chat.isSuccess)
       recordAgentChatVisit(agent.companyId, userId, agent.id, chat.data?.id ?? null);
@@ -133,7 +142,7 @@ export function AgentChat() {
           }}>Start fresh</Button> : null}
       </div>
       <TaskDetailSurface
-        key={`${agent.id}:${userId}`}
+        key={`${agent.id}:${userId}:${threadId ?? "latest"}`}
         conversation={{ agent, issue: chat.data ?? null, ensureIssue }}
       />
     </>

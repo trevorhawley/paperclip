@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { AgentConversationSidebar } from "./AgentConversationSidebar";
+import { AgentConversationSidebar, type ChatThreadRow } from "./AgentConversationSidebar";
 import { queryViewKind } from "./QueryView";
 import { useAgentChatNavigation, useOpenAgentChat } from "@/hooks/useAgentChatNavigation";
 import { useLocation, useNavigate } from "@/lib/router";
@@ -25,7 +25,8 @@ export function AgentConversationsSidebar() {
   const { openNewAgent } = useDialogActions();
   const memberships = useResourceMemberships(companyId);
   const { isMobile, setSidebarOpen } = useSidebar();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const threadParam = new URLSearchParams(search).get("thread");
   const activeRef = pathname.split("/chats/")[1]?.split("/")[0];
   const roster = agents.data ?? [];
   // The active roster excludes terminated agents, but their history remains readable.
@@ -45,10 +46,11 @@ export function AgentConversationsSidebar() {
   }, [chats.data, activeId]);
   const unreadAgentIds = useMemo(() => (chats.data ?? [])
     .flatMap(chat => chat.isUnreadForMe && chat.conversationAgentId ? [chat.conversationAgentId] : []), [chats.data]);
-  const conversations = (chats.data ?? []).flatMap(chat => {
+  // One row per agent on the Agents tab, even with several threads each.
+  const conversations = [...new Map((chats.data ?? []).flatMap(chat => {
     const agent = chat.conversationAgentId ? byId.get(chat.conversationAgentId) : undefined;
-    return agent ? [agent] : [];
-  });
+    return agent ? [[agent.id, agent] as const] : [];
+  })).values()];
   if (active && !conversations.some(agent => agent.id === active.id)) conversations.unshift(active);
   // Everyone you can chat with is listed, not only agents you've already
   // talked to: conversations first by recent activity, then the rest of the
@@ -62,15 +64,27 @@ export function AgentConversationsSidebar() {
   const projects = useQuery({ queryKey: queryKeys.projects.list(companyId!), queryFn: () => projectsApi.list(companyId!), enabled: !!companyId });
   const projectNames = new Map((projects.data ?? []).map(project => [project.id, project.name]));
   // Each chat row says who it's with, which project, and when it last moved.
-  const chatMeta = Object.fromEntries((chats.data ?? []).flatMap(chat => chat.conversationAgentId ? [[chat.conversationAgentId, {
+  const chatMeta = Object.fromEntries([...(chats.data ?? [])].reverse().flatMap(chat => chat.conversationAgentId ? [[chat.conversationAgentId, {
     projectName: chat.projectId ? projectNames.get(chat.projectId) ?? null : null,
     updatedAt: String(chat.updatedAt),
   }]] : []));
+  // Recents: every thread, newest first, tagged with its project and agent.
+  const threads: ChatThreadRow[] = (chats.data ?? []).flatMap(chat => {
+    const agent = chat.conversationAgentId ? byId.get(chat.conversationAgentId) : undefined;
+    return agent ? [{
+      id: chat.id, title: chat.title, agent,
+      projectName: chat.projectId ? projectNames.get(chat.projectId) ?? null : null,
+      updatedAt: String(chat.updatedAt), unreadCount: chat.unreadMessageCount ?? 0,
+      unread: !!chat.isUnreadForMe, working: chat.conversationState === "active",
+    }] : [];
+  });
+  const activeThreadId = threadParam ?? (activeId ? threads.find(thread => thread.agent.id === activeId)?.id ?? null : null);
   const previews = Object.fromEntries((chats.data ?? []).filter(chat => chat.conversationState === "active")
     .map(chat => [chat.conversationAgentId!, "Working…"]));
   return <AgentConversationSidebar key={`${companyId}:${userId}`} agents={[...conversations, ...teammates]} availableAgents={roster}
     existingChatAgentIds={existingChatAgentIds}
     conversationAgentIds={conversations.map(agent => agent.id)} chatMeta={chatMeta}
+    threads={threads} activeThreadId={activeThreadId} onThreadSelect={() => { if (isMobile) setSidebarOpen(false); }}
     activeId={active?.id} previews={previews}
     unreadAgentIds={unreadAgentIds}
     unreadMessageCounts={unreadMessageCounts}

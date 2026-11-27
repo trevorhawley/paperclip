@@ -2029,6 +2029,8 @@ async function assertExecutionTaskParent(db: Db, companyId: string, parentId?: s
 type DbTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 // `originIssueId` is server-derived provenance; callers cannot supply it.
 type IssueCreateInput = Omit<typeof issues.$inferInsert, "companyId" | "title" | "titleNeedsGeneration" | "workspaceSelection" | "originIssueId"> & {
+  /** Open a separate chat thread instead of returning the agent's existing one. */
+  conversationNewThread?: boolean;
   /** Defaults to `flatten` (agent/automation limit). Board-user routes pass `allow_nested`. */
   parentDepthPolicy?: IssueParentDepthPolicy;
   /**
@@ -10184,9 +10186,9 @@ export function issueService(db: Db) {
       eq(issues.companyId, companyId), eq(issues.conversationUserId, userId), isNotNull(issues.conversationAgentId),
     )).orderBy(desc(issues.updatedAt), asc(issues.id)),
 
-    getConversation: async (companyId: string, agentId: string, userId: string) => db.select().from(issues).where(and(
+    getConversation: async (companyId: string, agentId: string, userId: string, dbOrTx: Db | DbTransaction = db) => dbOrTx.select().from(issues).where(and(
       eq(issues.companyId, companyId), eq(issues.conversationAgentId, agentId), eq(issues.conversationUserId, userId),
-    )).then((rows) => rows[0] ?? null),
+    )).orderBy(desc(issues.updatedAt), desc(issues.id)).limit(1).then((rows) => rows[0] ?? null),
 
     create: async (
       companyId: string,
@@ -10195,6 +10197,7 @@ export function issueService(db: Db) {
     ) => {
       const {
         workspaceSelection, workspaceSelectionSource = "explicit", workspaceSelectionActor,
+        conversationNewThread = false,
         initialPlan,
         conversationHandoff,
         labelIds: inputLabelIds,
@@ -10269,11 +10272,12 @@ export function issueService(db: Db) {
         issueData.parentId = parentResolution.effectiveParentId;
         await assertParentInCompany(tx, companyId, issueData.parentId);
         await assertExecutionTaskParent(tx as unknown as Db, companyId, issueData.parentId);
-        if (issueData.conversationAgentId && issueData.conversationUserId) {
+        if (issueData.conversationAgentId && issueData.conversationUserId && !conversationNewThread) {
           const identity = `conversation:${companyId}:${issueData.conversationAgentId}:${issueData.conversationUserId}`;
           await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${identity}, 0))`);
           const [existing] = await tx.select().from(issues).where(and(eq(issues.companyId, companyId),
-            eq(issues.conversationAgentId, issueData.conversationAgentId), eq(issues.conversationUserId, issueData.conversationUserId)));
+            eq(issues.conversationAgentId, issueData.conversationAgentId), eq(issues.conversationUserId, issueData.conversationUserId)))
+            .orderBy(desc(issues.updatedAt), desc(issues.id)).limit(1);
           if (existing) {
             const [enriched] = await withIssueLabels(tx, [existing]);
             const [withRelations] = await withIssueRelationSummaries(companyId, [enriched], tx);
