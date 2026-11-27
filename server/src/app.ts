@@ -1,3 +1,4 @@
+import { loopbackCanonicalHost } from "./middleware/loopback-canonical-host.js";
 import type { IdleDeadlineOwners } from "./services/idle-deadline-types.js";
 import { startMcpClientMirrorSync } from "./services/public-mcp/client-mirror-sync.js";
 import { registerIdleMcpOwners } from "./services/public-mcp/idle-sleep-proof.js";
@@ -541,6 +542,7 @@ export async function createApp(
     allowedHostnames: opts.allowedHostnames,
     bindHost: opts.bindHost,
   });
+  app.use(loopbackCanonicalHost(opts.bindHost));
   app.use(
     privateHostnameGuard({
       enabled: privateHostnameGateEnabled,
