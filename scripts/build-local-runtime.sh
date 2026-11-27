@@ -79,6 +79,29 @@ done
 cp -R "$OUT/server-staged/node_modules/." "$SV/node_modules/"
 cmp -s "$SRC/server/dist/build-info.json" "$SV/dist/build-info.json"
 
+# The staged manifest delegates the provider platform executables (Claude Agent
+# SDK, Codex) to the server's optionalDependencies, which npm installs for the
+# host. A local runtime gets neither from the copy above: carry the declarations
+# into the deployed server manifest and add this host's platform packages from
+# the source install. Without them every Claude agent fails admission
+# (ACPX_ADMISSION_INSTALLATION: "omitted its verified platform executable package").
+python3 - "$OUT/server-staged/package.json" "$SV/package.json" <<'PY'
+import json, sys
+staged, deployed = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+deployed["optionalDependencies"] = {**deployed.get("optionalDependencies", {}), **staged.get("optionalDependencies", {})}
+json.dump(deployed, open(sys.argv[2], "w"), indent=2)
+PY
+HOST_TARGET="$(node -p 'process.platform + "-" + process.arch')"
+for entry in $(node -e 'const p=require(process.argv[1]);console.log(Object.entries(p.optionalDependencies||{}).filter(([n])=>n.startsWith("@anthropic-ai/claude-agent-sdk-")&&n.endsWith(process.argv[2])).map(([n,v])=>n+"@"+v).join(" "))' "$SV/package.json" "-$HOST_TARGET"); do
+  name="${entry%@*}"; version="${entry##*@}"
+  src="$SRC/node_modules/.pnpm/${name/\//+}@$version/node_modules/$name"
+  test -f "$src/package.json" || { echo "missing $name@$version in the source install" >&2; exit 1; }
+  mkdir -p "$SV/node_modules/$(dirname "$name")"
+  rm -rf "$SV/node_modules/$name"; cp -RL "$src" "$SV/node_modules/$name"
+  echo "platform package $name@$version"
+done
+test -n "$(ls -d "$SV/node_modules/@anthropic-ai/claude-agent-sdk-$HOST_TARGET" 2>/dev/null)"
+
 echo "== smoke"
 ( cd "$RT" && node dist/index.js --version )
 node -e 'const b=require(process.argv[1]); if(b.commit!==process.argv[2]) process.exit(1)' "$SV/dist/build-info.json" "$SHA"
