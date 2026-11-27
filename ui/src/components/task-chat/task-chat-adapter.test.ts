@@ -6,6 +6,18 @@ import {
 } from "./task-chat-adapter";
 
 describe("commentsToTaskChatItems", () => {
+  it("shows a fast agent reply as a message; only a person's reset is a new session", () => {
+    const comments = [
+      { id: "reset", authorType: "user", authorUserId: "me", authorAgentId: null, body: "/new",
+        conversationSessionGeneration: 1, createdAt: "2026-11-27T15:57:56Z" },
+      { id: "fast", authorType: "agent", authorUserId: null, authorAgentId: "agent-1", body: "On it.",
+        conversationSessionGeneration: 1, createdAt: "2026-11-27T15:59:42Z" },
+    ] as unknown as IssueChatComment[];
+    const items = commentsToTaskChatItems(comments, { currentUserId: "me" });
+    expect(items.map(item => item.kind)).toEqual(["marker", "message"]);
+    expect(JSON.stringify(items[1])).toContain("On it.");
+  });
+
   it("preserves distinct human IDs, photos and viewer ownership, including after a profile refresh", () => {
     const comments = ["alex", "sam"].map(authorUserId => ({
       id: `comment-${authorUserId}`, authorType: "user", authorUserId,

@@ -72,7 +72,9 @@ export function commentsToTaskChatItems(
   const items: TaskChatItem[] = [];
   for (const comment of comments) {
     if (comment.deletedAt) continue;
-    if (comment.conversationSessionGeneration != null) {
+    // Only a person's reset ("/new", "Start fresh") opens a new session. Fast
+    // replies also carry the session generation they answered; they are messages.
+    if (comment.conversationSessionGeneration != null && !comment.authorAgentId) {
       items.push({ id: comment.id, kind: "marker", variant: "session_start", label: "New session",
         detail: "Earlier messages and files are still available.", createdAtIso: new Date(comment.createdAt).toISOString() });
       continue;
