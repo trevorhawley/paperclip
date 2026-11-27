@@ -29,6 +29,7 @@ import { clearLegacyChatMessageRequests } from "@/lib/chat-message-request";
 import { agentChatDraft } from "@/lib/agent-chat-draft";
 import { trackRecentProject } from "@/lib/recent-projects";
 import { ExecutionBlockerNotice } from "../components/ExecutionBlockerNotice";
+import { SendAgainNotice } from "../components/SendAgainNotice";
 import type { TaskComposerPause } from "../components/task-chat/TaskChatPausedTakeover";
 import { TaskDetailTasksPanel } from "@/components/task-detail/TaskDetailTasksPanel";
 import { IssueCreatedFromNote } from "@/components/task-detail/IssueCreatedFromNote";
@@ -8202,6 +8203,11 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                 void issuesApi.addComment(issue.id, "/new", undefined, undefined, undefined, crypto.randomUUID())
                   .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.issues.detail(issue.id) }));
               } : undefined} />
+          )}
+          {resolvedDetailTab === "chat" && issue.conversationAgentId && (
+            <SendAgainNotice comments={comments} hasLiveRuns={hasLiveRuns} agentId={issue.conversationAgentId}
+              companyId={issue.companyId} issueId={issue.id}
+              explained={!!issue.interruption && issue.interruption.state !== "resolved"} />
           )}
 
           {issue.status === "in_review" && issue.externalConversationState === "waiting" && (
