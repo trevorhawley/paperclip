@@ -1257,7 +1257,7 @@ export function TaskChatComposer({
       {takeoverVisible && takeover ? (
         <section
           className={cn(
-            "relative rounded-xl border border-border bg-card p-(--sz-18px) shadow-sm",
+            "relative rounded-xl border border-border bg-card p-3 shadow-sm",
             mobile ? "overflow-visible" : "max-h-(--tc-interaction-card-max-h) overflow-y-auto scrollbar-auto-hide",
           )}
           aria-label={takeover.label}
@@ -1419,7 +1419,7 @@ export function TaskChatComposer({
               contentClassName={
                 mobile
                   ? "max-h-(--tc-composer-editor-max-height) min-h-(--sz-48px) overflow-y-auto px-1 py-1 text-base scrollbar-auto-hide"
-                  : "max-h-(--sz-28dvh) min-h-(--sz-48px) overflow-y-auto px-1 py-1 text-sm scrollbar-auto-hide"
+                  : "max-h-(--sz-28dvh) min-h-7 overflow-y-auto px-1 py-0.5 text-sm scrollbar-auto-hide"
               }
             />
           </div>
