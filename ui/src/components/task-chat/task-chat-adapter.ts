@@ -75,6 +75,8 @@ export function commentsToTaskChatItems(
     // Only a person's reset ("/new", "Start fresh") opens a new session. Fast
     // replies also carry the session generation they answered; they are messages.
     if (comment.conversationSessionGeneration != null && (!comment.authorAgentId || comment.body?.trim() === "/new")) {
+      // Back-to-back resets with nothing between them read as one boundary.
+      if (items[items.length - 1]?.kind === "marker" && (items[items.length - 1] as { variant?: string }).variant === "session_start") continue;
       items.push({ id: comment.id, kind: "marker", variant: "session_start", label: "New session",
         detail: "Earlier messages and files are still available.", createdAtIso: new Date(comment.createdAt).toISOString() });
       continue;

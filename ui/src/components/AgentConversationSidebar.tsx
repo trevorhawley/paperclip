@@ -1,10 +1,12 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { Plus, Search, Users, X } from "lucide-react";
+import { Archive, ArchiveRestore, MoreHorizontal, Plus, Search, Trash2, Users, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import type { Agent } from "@paperclipai/shared";
 import { AgentChatPicker } from "@/components/AgentChatPicker";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "@/lib/router";
 import { agentRouteRef, cn } from "@/lib/utils";
@@ -38,6 +40,10 @@ export interface AgentConversationSidebarProps {
   threads?: readonly ChatThreadRow[];
   activeThreadId?: string | null;
   onThreadSelect?: () => void;
+  /** Archive (true) or restore (false) a thread. Archived threads leave Recents. */
+  onArchiveThread?: (threadId: string, archived: boolean) => void | Promise<void>;
+  /** Permanently delete a thread, after the person confirms. */
+  onDeleteThread?: (threadId: string) => void | Promise<void>;
 }
 
 export interface ChatThreadRow {
@@ -49,10 +55,11 @@ export interface ChatThreadRow {
   unreadCount: number;
   unread: boolean;
   working: boolean;
+  archived?: boolean;
 }
 
 /** Searchable chat navigation: Recents (threads) and Agents. */
-export function AgentConversationSidebar({ agents, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, conversationAgentIds, chatMeta = {}, threads, activeThreadId, onThreadSelect }: AgentConversationSidebarProps) {
+export function AgentConversationSidebar({ agents, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, conversationAgentIds, chatMeta = {}, threads, activeThreadId, onThreadSelect, onArchiveThread, onDeleteThread }: AgentConversationSidebarProps) {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState(initialSearch);
@@ -65,8 +72,13 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
   const [chosenTab, setTab] = useState<"chats" | "agents" | null>(null);
   const tab = chosenTab ?? (conversationAgentIds?.length || threads?.length ? "chats" : "agents");
   const showThreads = tabbed && tab === "chats" && threads !== undefined;
+  const [showArchived, setShowArchived] = useState(false);
+  const [deleting, setDeleting] = useState<ChatThreadRow | null>(null);
+  const archivedCount = (threads ?? []).filter(thread => thread.archived).length;
+  // Search covers archived chats too; otherwise Recents and Archived are separate views.
   const visibleThreads = (threads ?? []).filter(thread =>
-    `${thread.title} ${thread.agent.name} ${thread.projectName ?? ""}`.toLocaleLowerCase().includes(query));
+    (query ? true : !!thread.archived === showArchived)
+    && `${thread.title} ${thread.agent.name} ${thread.projectName ?? ""}`.toLocaleLowerCase().includes(query));
   const chatIds = new Set(conversationAgentIds ?? []);
   // Agents keeps the full eligible list (open chat, then recent chats, then A–Z).
   const pool = !tabbed || tab === "agents" ? agents : agents.filter(agent => chatIds.has(agent.id));
@@ -107,11 +119,26 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         {visibleThreads.map(thread => {
           const selected = activeThreadId === thread.id;
           const hasUnread = thread.unreadCount > 0 || thread.unread;
-          return <Link key={thread.id} to={chatThreadHref(thread.agent, thread.id)} aria-current={selected ? "page" : undefined}
+          const actions = (onArchiveThread || onDeleteThread) && <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label={`Chat actions for ${thread.title}`}
+                className="absolute right-1 top-1.5 flex size-6 items-center justify-center rounded-md bg-accent text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/thread:opacity-100 data-[state=open]:opacity-100">
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              {onArchiveThread && <DropdownMenuItem onSelect={() => void onArchiveThread(thread.id, !thread.archived)}>
+                {thread.archived ? <><ArchiveRestore className="size-4" />Restore</> : <><Archive className="size-4" />Archive</>}
+              </DropdownMenuItem>}
+              {onArchiveThread && onDeleteThread && <DropdownMenuSeparator />}
+              {onDeleteThread && <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(thread)}><Trash2 className="size-4" />Delete</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>;
+          return <div key={thread.id} className="group/thread relative">{actions}<Link to={chatThreadHref(thread.agent, thread.id)} aria-current={selected ? "page" : undefined}
             title={thread.title}
             onClick={() => onThreadSelect?.()}
             className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-              selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60")}>
+              selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60 group-hover/thread:bg-accent/60")}>
             <span className="flex min-w-0 items-center gap-2">
               <span className={cn("min-w-0 flex-1 truncate text-sm", hasUnread && "font-semibold")}>{thread.title}</span>
               <span className="shrink-0 text-xs text-muted-foreground">{thread.working ? "Working…" : formatChatTime(thread.updatedAt)}</span>
@@ -121,13 +148,19 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
             <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
               <AgentAvatar agent={thread.agent} size={16} />
               <span className="min-w-0 truncate">{[thread.projectName ?? "No project", thread.agent.name].join(" / ")}</span>
+              {thread.archived && <span className="shrink-0">· Archived</span>}
             </span>
-          </Link>;
+          </Link></div>;
         })}
       </nav> : <div className="flex flex-col items-start gap-2 px-2 py-6">
-        <p className="text-sm font-medium">{query ? "No chats found" : "No chats yet"}</p>
-        <p className="text-xs leading-relaxed text-muted-foreground">{query ? "Try another title, project or agent." : "Start one with New chat."}</p>
+        <p className="text-sm font-medium">{query ? "No chats found" : showArchived ? "No archived chats" : "No chats yet"}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{query ? "Try another title, project or agent." : showArchived ? "Archived chats appear here." : "Start one with New chat."}</p>
       </div> : null}
+      {showThreads && !error && !loading && !query && (archivedCount > 0 || showArchived) && <button type="button"
+        onClick={() => setShowArchived(value => !value)}
+        className="self-start rounded-md px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground">
+        {showArchived ? "← Back to Recents" : `Archived (${archivedCount})`}
+      </button>}
       {showThreads && !error && !loading ? null : error ? <div role="alert" className="flex flex-col items-start gap-2 px-2 py-6"><p className="text-sm">Couldn’t load your chats.</p><Button variant="outline" size="sm" onClick={onRetry}>Try again</Button></div> : loading ? <div aria-hidden="true" className="flex flex-col gap-1">
         {[0, 1, 2, 3].map(index => <div key={index} className="flex items-center gap-3 rounded-md px-2 py-3 motion-safe:animate-pulse">
           <div className="size-8 shrink-0 rounded-lg bg-muted" />
@@ -171,6 +204,18 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         <Users className="size-4" />Browse all agents
       </Button>
     </div>}
+    <AlertDialog open={!!deleting} onOpenChange={open => { if (!open) setDeleting(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+          <AlertDialogDescription>“{deleting?.title}” and its messages will be permanently deleted. This can’t be undone. Archive it instead if you might need it later.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={() => { const thread = deleting; setDeleting(null); if (thread) void onDeleteThread?.(thread.id); }}>Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <AgentChatPicker agents={availableAgents} open={pickerOpen} onOpenChange={setPickerOpen}
       unreadMessageCounts={unreadMessageCounts}
       existingChatAgentIds={existingChatAgentIds ?? agents.map(agent => agent.id)} loading={loading} error={error} onRetry={onRetry}

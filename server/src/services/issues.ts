@@ -10188,6 +10188,7 @@ export function issueService(db: Db) {
 
     getConversation: async (companyId: string, agentId: string, userId: string, dbOrTx: Db | DbTransaction = db) => dbOrTx.select().from(issues).where(and(
       eq(issues.companyId, companyId), eq(issues.conversationAgentId, agentId), eq(issues.conversationUserId, userId),
+      isNull(issues.hiddenAt),
     )).orderBy(desc(issues.updatedAt), desc(issues.id)).limit(1).then((rows) => rows[0] ?? null),
 
     create: async (
@@ -10276,7 +10277,8 @@ export function issueService(db: Db) {
           const identity = `conversation:${companyId}:${issueData.conversationAgentId}:${issueData.conversationUserId}`;
           await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${identity}, 0))`);
           const [existing] = await tx.select().from(issues).where(and(eq(issues.companyId, companyId),
-            eq(issues.conversationAgentId, issueData.conversationAgentId), eq(issues.conversationUserId, issueData.conversationUserId)))
+            eq(issues.conversationAgentId, issueData.conversationAgentId), eq(issues.conversationUserId, issueData.conversationUserId),
+            isNull(issues.hiddenAt)))
             .orderBy(desc(issues.updatedAt), desc(issues.id)).limit(1);
           if (existing) {
             const [enriched] = await withIssueLabels(tx, [existing]);
