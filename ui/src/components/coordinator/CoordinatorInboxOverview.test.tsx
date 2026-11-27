@@ -53,8 +53,8 @@ it("separates running and queued work from stored status, and shows the blocker 
     expect(container.querySelector('[aria-label="Marked in progress"]')?.textContent).toContain("Status only");
     expect(container.querySelector('[aria-label="Marked in progress"]')?.textContent).not.toContain("Running task");
     expect(container.querySelector('[aria-label="Blocked work"]')?.textContent).toMatch(/Approve the requested access.*Workspace owner/);
-    await vi.waitFor(() => expect(container.querySelector('[aria-label="Runs that failed"]')?.textContent).toMatch(/Draft newsletter.*Failed.*Model provider rejected the request.*View run/));
-    expect(container.querySelector('[aria-label="Runs that failed"]')?.textContent).not.toContain("Old failure");
+    await vi.waitFor(() => expect(container.querySelector('[aria-label="Failed runs"]')?.textContent).toMatch(/Draft newsletter.*Failed.*Model provider rejected the request.*View run/));
+    expect(container.querySelector('[aria-label="Failed runs"]')?.textContent).not.toContain("Old failure");
     expect(container.querySelector('[aria-label="Recently completed"]')?.textContent).toContain("Finished task");
   } finally {
     await act(async () => root.unmount());

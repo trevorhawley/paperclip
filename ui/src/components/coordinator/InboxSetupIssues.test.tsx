@@ -21,7 +21,8 @@ it("lists hidden blockers with one-click fixes, and nothing when clear", async (
     <InboxSetupIssues companyId="c" agents={[agent("Writer", "paused", "manual"), agent("Coder", "error"), agent("Ops", "paused", "budget"), agent("Idle", "idle")]} />
   </MemoryRouter></QueryClientProvider>));
   await vi.waitFor(() => expect(container.textContent).toContain("Agent runs are switched off"));
-  expect(container.textContent).toMatch(/Writer is paused.*Ops hit its budget.*Coder's last run failed/);
+  expect(container.textContent).toMatch(/Writer is paused.*Ops hit its budget/);
+  expect(container.textContent).not.toContain("Coder");
   expect(container.textContent).not.toContain("Idle");
   await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Resume")!.click());
   expect(resume).toHaveBeenCalledWith("Writer", "c");
