@@ -34,6 +34,7 @@ import { CoordinatorWorkList, coordinatorWorkViews, type CoordinatorWorkStatus }
 
 import { CoordinatorInboxOverview } from "./CoordinatorInboxOverview";
 import { InboxSetupIssues } from "./InboxSetupIssues";
+import { InboxSection } from "./InboxSection";
 
 type Group = "none" | "task" | "agent" | "project";
 
@@ -236,7 +237,7 @@ export function CoordinatorNeedsYou() {
     </div>
     {view !== "pending" ? <CoordinatorWorkList key={`${selectedCompanyId}:${userId}:${view}`} companyId={selectedCompanyId} userId={userId} status={view} /> : <>
     {overview && <InboxSetupIssues companyId={selectedCompanyId} agents={agentQuery.data ?? []} />}
-    {overview && <h2 className="text-sm font-semibold">Decisions requiring attention</h2>}
+    <DecisionsFrame framed={overview} count={filtered.length}>
     <div hidden={overview} data-canonical-toolbar="coordinator-decisions" role="toolbar" aria-label="Decisions controls" className="flex flex-wrap items-center gap-2">
       <ToolbarSearch query={query} onQueryChange={setQuery} label="Search decisions" placeholder="Search decisions or task IDs…" />
       <NativeSelect aria-label="Filter decisions by agent" value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)} className="w-auto"><option value="">All agents</option>{(agentQuery.data ?? []).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</NativeSelect>
@@ -273,11 +274,18 @@ export function CoordinatorNeedsYou() {
       </CoordinatorTaskMotion>
       </motion.div>;
     })}</div>)}
-    {overview && filtered.length > 3 ? <Button variant="outline" onClick={() => setView("pending")}>See all decisions</Button> : null}
+    {overview && filtered.length > 3 ? <Button size="sm" variant="ghost" onClick={() => setView("pending")}>See all {filtered.length} decisions</Button> : null}
+    </DecisionsFrame>
     {!overview && filtered.length > renderLimit ? <Button variant="outline" onClick={() => setRenderLimit((value) => value + 40)}>Show more decisions</Button> : null}
     {!overview && visibleRecentItems.length ? <section className="space-y-3" aria-label="Recent Decisions"><h2 className="text-sm font-medium text-muted-foreground">Recent Decisions</h2>{recentGroups.map(([label, items]) => <div key={label} className="space-y-3">{label ? <h3 className="text-sm font-medium text-muted-foreground">{label}</h3> : null}{items.map((item) => <motion.div layout={!reducedMotion} layoutId={reducedMotion ? undefined : item.id} transition={{ duration }} key={item.id}><Receipt item={item} onOpen={navigate} /></motion.div>)}</div>)}</section> : null}
     {(recentView.kind === "error") ? <p role="alert" className="text-sm text-muted-foreground">Recent decisions could not be loaded. <button className="underline" onClick={() => void recent.refetch()}>Retry</button></p> : null}
     {overview && <CoordinatorInboxOverview companyId={selectedCompanyId} userId={userId} agents={agentMap} />}
     </>}
   </section></LayoutGroup>;
+}
+
+/** On the Overview, decisions sit in the same bounded block as every other
+ * section; module-level so toggling never remounts the cards inside. */
+function DecisionsFrame({ framed, count, children }: { framed: boolean; count: number; children: React.ReactNode }) {
+  return framed ? <InboxSection label="Decisions waiting on you" count={count}>{children}</InboxSection> : <>{children}</>;
 }

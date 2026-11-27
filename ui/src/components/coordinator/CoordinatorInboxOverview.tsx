@@ -5,6 +5,7 @@ import { heartbeatsApi } from "@/api/heartbeats";
 import { issuesApi } from "@/api/issues";
 import { projectsApi } from "@/api/projects";
 import { Button } from "@/components/ui/button";
+import { InboxSection } from "./InboxSection";
 import { createIssueDetailLocationState } from "@/lib/issueDetailBreadcrumb";
 import { useVisibilityRefetchInterval } from "@/lib/polling";
 import { queryKeys } from "@/lib/queryKeys";
@@ -93,9 +94,8 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
   const failedTasks = failedRuns.map(run => ({ run, task: issueById.get(issueIdForRun(run) ?? "") }))
     .filter(({ task }) => task?.status !== "done" && task?.status !== "cancelled");
 
-  return <div className="space-y-4">
-    <section aria-label="Executing now" className="space-y-1">
-      <h2 className="text-sm font-semibold">Executing now</h2>
+  return <div className="space-y-3">
+    <InboxSection label="Executing now" count={running.length + waiting.length}>
       {live.isPending ? <p role="status">Checking execution…</p> : live.isError ? <p role="alert">Execution status could not be loaded. <Button variant="ghost" size="sm" onClick={() => void live.refetch()}>Retry</Button></p> :
         !running.length && !waiting.length ? <p className="text-sm text-muted-foreground">No live runs.</p> : null}
       {[...running, ...waiting].slice(0, LIMIT).map(run => {
@@ -109,10 +109,9 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
           {time && <p className="text-xs text-muted-foreground">Last confirmed progress <time dateTime={time}>{new Date(time).toLocaleString()}</time></p>}
         </article>;
       })}
-    </section>
+    </InboxSection>
     {failures.isError ? <p role="alert" className="text-sm">Failed runs could not be loaded. <Button variant="ghost" size="sm" onClick={() => void failures.refetch()}>Retry</Button></p> :
-      failedTasks.length > 0 && <section aria-label="Runs that failed" className="space-y-1">
-        <h2 className="text-sm font-semibold">Runs that failed</h2>
+      failedTasks.length > 0 && <InboxSection label="Failed runs" count={failedTasks.length}>
         {failedTasks.map(({ run, task }) => {
           const agent = agents.get(run.agentId);
           const time = run.finishedAt ?? run.createdAt;
@@ -123,12 +122,11 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
             <p className="text-xs text-muted-foreground"><time dateTime={new Date(time).toISOString()}>{new Date(time).toLocaleString()}</time> · <Link className="underline" to={`/agents/${run.agentId}/runs/${run.id}`}>View run</Link></p>
           </article>;
         })}
-      </section>}
+      </InboxSection>}
     {work.isPending ? <p role="status">Loading recent work…</p> : work.isError ?
       <p role="alert">Recent work could not be loaded. <Button variant="ghost" size="sm" onClick={() => void work.refetch()}>Retry</Button></p> : null}
-    {work.data && <div className="grid gap-4 md:grid-cols-3">
-      <section aria-label="Blocked work" className="space-y-1">
-        <h2 className="text-sm font-semibold">Blocked work</h2>
+    {work.data && <div className="grid gap-3 md:grid-cols-3">
+      <InboxSection label="Blocked work" count={work.data.blocked.length}>
         {work.data.blocked.length === 0 && <p className="text-sm text-muted-foreground">No blocked tasks.</p>}
         {work.data.blocked.map(task => {
           const blocker = task.blockedInboxAttention;
@@ -140,21 +138,19 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
             {!blocker && task.blockedBy?.filter(issue => issue.status !== "done").map(issue => <p key={issue.id} className="truncate text-xs">Waiting on {issue.identifier} {issue.title}</p>)}
           </article>;
         })}
-      </section>
-      <section aria-label="Marked in progress" className="space-y-1">
-        <h2 className="text-sm font-semibold">Marked in progress</h2>
+      </InboxSection>
+      <InboxSection label="Marked in progress" count={work.data.active.filter(task => !executingIds.has(task.id)).length}>
         {work.data.active.filter(task => !executingIds.has(task.id)).map(task => <p key={task.id} className="truncate text-sm">
           {taskName(task)} {taskContext(task) && <span className="text-muted-foreground"> · {taskContext(task)}</span>}
         </p>)}
         {!work.data.active.some(task => !executingIds.has(task.id)) && <p className="text-sm text-muted-foreground">No other tasks marked in progress.</p>}
-      </section>
-      <section aria-label="Recently completed" className="space-y-1">
-        <h2 className="text-sm font-semibold">Recently completed</h2>
+      </InboxSection>
+      <InboxSection label="Recently completed" count={work.data.completed.filter(task => task.completedAt != null).length}>
         {!work.data.completed.some(task => task.completedAt != null) && <p className="text-sm text-muted-foreground">No completed tasks.</p>}
         {work.data.completed.filter(task => task.completedAt != null).sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime()).map(task => <p key={task.id} className="truncate text-sm">
           {taskName(task)} {taskContext(task) && <span className="text-muted-foreground"> · {taskContext(task)}</span>}
         </p>)}
-      </section>
+      </InboxSection>
     </div>}
   </div>;
 }
