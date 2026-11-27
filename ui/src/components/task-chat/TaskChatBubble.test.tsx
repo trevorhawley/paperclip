@@ -110,11 +110,11 @@ describe("TaskChatBubble attachment chips", () => {
     expect(container.querySelector('[data-testid="task-chat-human-bubble"]')?.parentElement?.classList.contains("items-start")).toBe(true);
     const bubble = container.querySelector('[data-testid="task-chat-human-bubble"]');
     expect(bubble?.className).toContain("bg-transparent");
-    expect(bubble?.className).not.toContain("bg-(--liveness-blue)");
+    expect(bubble?.className).not.toContain("bg-(--bubble-human-bg");
     expect(bubble?.querySelector(".paperclip-markdown")?.className).not.toContain("paperclip-markdown-on-accent");
     render(true);
     expect(bubble?.parentElement?.classList.contains("items-end")).toBe(true);
-    expect(bubble?.className).toContain("bg-(--liveness-blue)");
+    expect(bubble?.className).toContain("bg-(--bubble-human-bg");
     expect(container.querySelector('[data-testid="task-chat-human-identity"]')).toBeNull();
     expect(container.textContent).toContain("I still see the old task title.");
   });

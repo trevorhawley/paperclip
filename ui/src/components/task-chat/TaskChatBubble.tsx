@@ -280,7 +280,7 @@ function TaskChatBubbleContent({
           className={cn(
             "break-words py-2 text-sm",
             isOwnMessage
-              ? "max-w-(--pct-85) rounded-2xl rounded-br-sm bg-(--liveness-blue) px-3.5 text-white"
+              ? "max-w-(--pct-85) rounded-xl bg-(--bubble-human-bg,var(--muted)) px-3 text-(--bubble-human-fg,var(--foreground))"
               : "w-full bg-transparent px-1 text-foreground",
           )}
         >

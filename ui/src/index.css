@@ -5073,7 +5073,7 @@ html:has(.design-proposal-theme) .design-navigation-group-label {
   --coordinator-body-size: var(--text-sm);
   --coordinator-body-leading: var(--text-sm--line-height);
   --coordinator-card-radius: 14px;
-  --coordinator-card-inset: calc(var(--spacing) * 7);
+  --coordinator-card-inset: calc(var(--spacing) * 5);
   --coordinator-card-shadow: 0 5px 22px #00000008;
   --coordinator-composer-shadow: 0 8px 30px #0000000a;
   --background: #fafafa;
@@ -5090,8 +5090,9 @@ html:has(.design-proposal-theme) .design-navigation-group-label {
   --muted-foreground: #6d6d6d;
   --accent: #ebebeb;
   --accent-foreground: var(--foreground);
-  --bubble-human-bg: var(--liveness-blue);
-  --bubble-human-fg: var(--color-white);
+  /* Claude-like: the person's message is a quiet tinted bubble, not a bright accent. */
+  --bubble-human-bg: #efefef;
+  --bubble-human-fg: var(--foreground);
   --streamlined-task-detail-bg: var(--background);
   --side-panel-bg: var(--card);
   --side-panel-streamlined-tab-active-bg: var(--sidebar-accent);
@@ -5109,7 +5110,7 @@ html:has(.design-proposal-theme) .design-navigation-group-label {
   --muted: #2a2a28;
   --muted-foreground: #a5a5a0;
   --accent: #30302e;
-  --bubble-human-bg: var(--liveness-blue);
+  --bubble-human-bg: #2f2f2f;
   --coordinator-card-shadow: 0 5px 22px #00000020;
   --coordinator-composer-shadow: 0 8px 30px #00000026;
 }
@@ -5162,7 +5163,7 @@ html:not(.dark) .coordinator-sidebar {
 .coordinator-decision-card [data-decision-prompt] { font-size: var(--text-base); line-height: var(--text-base--line-height); font-weight: var(--font-weight-medium); }
 .coordinator-decision-card [id^="interaction-"]:focus { outline-color: var(--ring); }
 @media (max-width: 767px) {
-  .coordinator-workspace { --coordinator-card-inset: calc(var(--spacing) * 5); }
+  .coordinator-workspace { --coordinator-card-inset: calc(var(--spacing) * 4); }
 }
 /* Coordinator commitments: event-triggered, bounded motion; settled content is
    always usable. Values live here rather than in presentation components. */
