@@ -5,7 +5,9 @@ import { useAgentChatNavigation, useOpenAgentChat } from "@/hooks/useAgentChatNa
 import { useLocation, useNavigate } from "@/lib/router";
 import { useSidebar } from "@/context/SidebarContext";
 import { agentRouteRef } from "@/lib/utils";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Issue } from "@paperclipai/shared";
+import { issuesApi } from "@/api/issues";
 import { projectsApi } from "@/api/projects";
 import { agentsApi } from "@/api/agents";
 import { queryKeys } from "@/lib/queryKeys";
@@ -22,6 +24,7 @@ export function AgentConversationsSidebar() {
       ? [[chat.conversationAgentId, chat.unreadMessageCount] as const] : [])), [chats.data]);
   const openChat = useOpenAgentChat(companyId, userId);
   const navigate = useNavigate();
+  const client = useQueryClient();
   const { openNewAgent } = useDialogActions();
   const memberships = useResourceMemberships(companyId);
   const { isMobile, setSidebarOpen } = useSidebar();
@@ -76,6 +79,7 @@ export function AgentConversationsSidebar() {
       projectName: chat.projectId ? projectNames.get(chat.projectId) ?? null : null,
       updatedAt: String(chat.updatedAt), unreadCount: chat.unreadMessageCount ?? 0,
       unread: !!chat.isUnreadForMe, working: chat.conversationState === "active",
+      archived: !!chat.hiddenAt,
     }] : [];
   });
   const activeThreadId = threadParam ?? (activeId ? threads.find(thread => thread.agent.id === activeId)?.id ?? null : null);
@@ -85,6 +89,17 @@ export function AgentConversationsSidebar() {
     existingChatAgentIds={existingChatAgentIds}
     conversationAgentIds={conversations.map(agent => agent.id)} chatMeta={chatMeta}
     threads={threads} activeThreadId={activeThreadId} onThreadSelect={() => { if (isMobile) setSidebarOpen(false); }}
+    onArchiveThread={async (threadId, archived) => {
+      await issuesApi.update(threadId, { hiddenAt: archived ? new Date().toISOString() : null });
+      await client.invalidateQueries({ queryKey: queryKeys.agentChats.list(companyId, userId) });
+      await client.invalidateQueries({ queryKey: ["agent-chat", companyId, userId] });
+    }}
+    onDeleteThread={async threadId => {
+      await issuesApi.remove(threadId);
+      client.setQueryData<Issue[]>(queryKeys.agentChats.list(companyId, userId), previous => previous?.filter(chat => chat.id !== threadId));
+      await client.invalidateQueries({ queryKey: ["agent-chat", companyId, userId] });
+      if (threadId === activeThreadId) navigate("/chats");
+    }}
     activeId={active?.id} previews={previews}
     unreadAgentIds={unreadAgentIds}
     unreadMessageCounts={unreadMessageCounts}

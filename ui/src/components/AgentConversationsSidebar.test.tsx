@@ -249,3 +249,17 @@ it("lists chat threads under Recents with a project / agent tag, and everyone on
   expect(container.querySelectorAll('nav[aria-label="Agent conversations"] a').length).toBeGreaterThanOrEqual(2);
   expect(container.textContent).toContain("Create a new agent");
 });
+
+it("moves archived chats out of Recents into an Archived view, and search still finds them", async () => {
+  client.setQueryData(queryKeys.agentChats.list("company-a", "user-a"), [
+    { ...chat("bob"), id: "live", title: "Plan the launch" },
+    { ...chat("bob"), id: "old", title: "Deviled egg recipe", hiddenAt: "2026-11-28T00:00:00Z" },
+  ]);
+  await render({ agentsTab: false });
+  const titles = () => [...container.querySelectorAll('nav[aria-label="Recent chats"] a')].map(row => row.getAttribute("href"));
+  expect(titles()).toEqual(["/chats/bob?thread=live"]);
+  const archived = [...container.querySelectorAll("button")].find(button => button.textContent === "Archived (1)")!;
+  await act(async () => archived.click());
+  expect(titles()).toEqual(["/chats/bob?thread=old"]);
+  expect(container.textContent).toContain("Back to Recents");
+});
