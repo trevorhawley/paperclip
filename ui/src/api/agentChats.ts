@@ -11,4 +11,10 @@ export const agentChatsApi = {
       `/companies/${companyId}/chats/${encodeURIComponent(agentRef)}`,
       {},
     ),
+  /** Always starts a separate thread with this agent. */
+  createThread: (companyId: string, agentRef: string) =>
+    api.post<Issue>(
+      `/companies/${companyId}/chats/${encodeURIComponent(agentRef)}`,
+      { newThread: true },
+    ),
 };

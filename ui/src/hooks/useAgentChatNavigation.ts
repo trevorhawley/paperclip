@@ -27,7 +27,7 @@ export function useAgentChatNavigation() {
   return { companyId, userId, enabled, loaded, agents, chats, session };
 }
 
-/** Explicitly adding a chat uses the existing atomic, one-per-agent resolver. */
+/** New chat: always starts a separate thread with the chosen agent. */
 export function useOpenAgentChat(companyId: string | null, userId: string | null) {
   const client = useQueryClient();
   const navigate = useNavigate();
@@ -41,14 +41,20 @@ export function useOpenAgentChat(companyId: string | null, userId: string | null
   return useCallback(async (agent: Agent, signal?: AbortSignal) => {
     if (!companyId || agent.companyId !== companyId) throw new Error("Choose an agent from this company.");
     const current = scope.current;
-    const chat = await agentChatsApi.ensure(companyId, agent.id);
+    const chat = await agentChatsApi.createThread(companyId, agent.id);
     client.setQueryData(queryKeys.agentChats.detail(companyId, userId, agent.id), chat);
     client.setQueryData(queryKeys.issues.detail(chat.id), chat);
     client.setQueryData<Issue[]>(queryKeys.agentChats.list(companyId, userId), previous =>
       [chat, ...(previous ?? []).filter(item => item.id !== chat.id)]
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || b.id.localeCompare(a.id)));
     if (!current.mounted || scope.current !== current || signal?.aborted) return;
-    navigate(`/chats/${encodeURIComponent(agentRouteRef(agent))}`);
+    navigate(chatThreadHref(agent, chat.id));
     if (isMobile) setSidebarOpen(false);
   }, [client, companyId, userId, navigate, isMobile, setSidebarOpen]);
+}
+
+/** Link to one chat thread; without a thread it opens the agent's latest. */
+export function chatThreadHref(agent: { id: string; status: string; name?: string | null; urlKey?: string | null }, threadId?: string | null) {
+  const ref = encodeURIComponent(agent.status === "terminated" ? agent.id : agentRouteRef(agent));
+  return threadId ? `/chats/${ref}?thread=${encodeURIComponent(threadId)}` : `/chats/${ref}`;
 }

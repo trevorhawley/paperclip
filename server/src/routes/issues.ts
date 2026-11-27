@@ -1,4 +1,5 @@
 import { listStalledDependencies } from "../services/recovery/blocker-stall-wakeups.js";
+import { deriveChatTitle, isDefaultChatTitle } from "../services/chat-thread-title.js";
 import { confirmMcpAttachmentCleanup, recordMcpAttachmentCleanup, type McpAttachmentCleanup } from "../services/public-mcp/upload-cleanup.js";
 import { notifyDeferredExecutionWork } from "../services/deferred-execution-notifications.js";
 import { notifyNativeRecoveryNotices } from "../services/native-recovery-notice-notifications.js";
@@ -19464,16 +19465,21 @@ export function issueRoutes(
       if (resolved.ambiguous) throw conflict("Agent reference is ambiguous");
       if (!resolved.agent) throw notFound("Agent not found");
       const agent = resolved.agent;
-      const existing = await svc.getConversation(companyId, agent.id, req.actor.userId);
+      // POST with { newThread: true } always starts a separate thread; otherwise
+      // GET/POST resolve the agent's most recent thread.
+      const newThread = method === "post" && req.body?.newThread === true;
+      const userId = req.actor.userId;
+      const existing = newThread ? null : await svc.getConversation(companyId, agent.id, userId);
       if (existing && !(await assertIssueReadAllowed(req, res, existing))) return;
       if (existing || method === "get") {
-        res.json(existing ? (await withConversationReadState(db, companyId, req.actor.userId, [existing]))[0] : null);
+        res.json(existing ? (await withConversationReadState(db, companyId, userId, [existing]))[0] : null);
         return;
       }
+      // create() returns the existing chat unless a separate thread is asked for.
       const issue = await svc.create(companyId, {
-        title: `Chat with ${agent.name}`, assigneeAgentId: agent.id,
-        conversationAgentId: agent.id, conversationUserId: req.actor.userId,
-        conversationState: "waiting", status: "in_review", createdByUserId: req.actor.userId,
+        title: newThread ? "New chat" : `Chat with ${agent.name}`, assigneeAgentId: agent.id,
+        conversationAgentId: agent.id, conversationUserId: userId, conversationNewThread: newThread,
+        conversationState: "waiting", status: "in_review", createdByUserId: userId,
       });
       await logActivity(db, { companyId, actorType: "user", actorId: req.actor.userId,
         action: "issue.conversation_opened", entityType: "issue", entityId: issue.id,
@@ -19556,6 +19562,9 @@ export function issueRoutes(
           const saved = await svc.addComment(issue.id, req.body.body, { userId }, {
             clientRequestId: req.body.clientRequestId, authorType: "user", attachmentIds: req.body.attachmentIds,
           }, tx);
+          const threadTitle = !existing && isDefaultChatTitle(issue.title) ? deriveChatTitle(req.body.body) : null;
+          if (threadTitle) await tx.update(issueRows).set({ title: threadTitle })
+            .where(and(eq(issueRows.id, issue.id), eq(issueRows.companyId, issue.companyId)));
           if (!existing) await logActivity(tx as unknown as Db, {
             companyId: issue.companyId, actorType: actor.actorType, actorId: actor.actorId,
             action: "issue.comment_added", entityType: "issue", entityId: issue.id,

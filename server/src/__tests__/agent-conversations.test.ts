@@ -318,6 +318,17 @@ import {
       expect(addedEvents).toHaveLength(1);
 
       expect((await db.select().from(issueTreeHolds).where(eq(issueTreeHolds.id, pause.id)))[0].status).toBe("released");
+      // New chat opens a separate thread, titled from its first message, and
+      // becomes the agent's latest thread; the earlier thread stays listed.
+      const thread = await request(app).post(path).send({ newThread: true });
+      expect(thread.status).toBe(200);
+      expect(thread.body.id).not.toBe(chatId);
+      expect(thread.body.title).toBe("New chat");
+      expect((await request(app).post(`/api/issues/${thread.body.id}/comments`)
+        .send({ body: "Deviled egg recipe for Sunday. Keep it simple.", clientRequestId: randomUUID() })).status).toBe(201);
+      expect((await issueService(db).getById(thread.body.id))?.title).toBe("Deviled egg recipe for Sunday");
+      expect((await request(app).get(path)).body.id).toBe(thread.body.id);
+      expect((await request(app).get(listPath)).body.map((chat: { id: string }) => chat.id)).toEqual([thread.body.id, chatId]);
       const local = await request(appFor()).post(path);
       expect(local.body.conversationUserId).toBe("local-board");
       await instanceSettingsService(db).updateExperimental({

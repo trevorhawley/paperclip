@@ -36,9 +36,10 @@ let root: Root;
 let container: HTMLDivElement;
 let client: QueryClient;
 const roster = ["alice", "bob"].map(id => ({ id, companyId: "company-a", name: id, urlKey: id, role: "general", title: "Teammate", status: "idle" } as Agent));
-const chat = (id: string) => ({ id: `chat-${id}`, companyId: "company-a", conversationAgentId: id, conversationUserId: "user-a", updatedAt: id === "bob" ? "2026-09-02T00:00:00Z" : "2026-09-01T00:00:00Z" });
-async function render() {
+const chat = (id: string) => ({ id: `chat-${id}`, title: `Chat with ${id}`, companyId: "company-a", conversationAgentId: id, conversationUserId: "user-a", updatedAt: id === "bob" ? "2026-09-02T00:00:00Z" : "2026-09-01T00:00:00Z" });
+async function render({ agentsTab = true } = {}) {
   await act(async () => { root.render(<QueryClientProvider client={client}><AgentConversationsSidebar /></QueryClientProvider>); });
+  if (agentsTab) await showAgentsTab();
 }
 async function openContact(name: string) {
   await act(async () => container.querySelector<HTMLAnchorElement>(`a[href="/chats/${name}"]`)!.click());
@@ -231,13 +232,20 @@ it("lists every eligible agent: open chat, then conversations by recency, then t
   });
 });
 
-it("shows recent chats with their project on the Chats tab, and everyone on Agents", async () => {
-  client.setQueryData(queryKeys.agentChats.list("company-a", "user-a"), [chat("bob")]);
-  await render();
+it("lists chat threads under Recents with a project / agent tag, and everyone on Agents", async () => {
+  client.setQueryData(queryKeys.agentChats.list("company-a", "user-a"), [
+    { ...chat("bob"), id: "thread-2", title: "Deviled egg recipe" },
+    { ...chat("bob"), id: "thread-1", title: "Plan the launch" },
+  ]);
+  await render({ agentsTab: false });
   const tabs = [...container.querySelectorAll('[role="tab"]')].map(tab => tab.textContent);
-  expect(tabs[0]).toMatch(/^Chats/);
-  expect(tabs[1]).toBe("Agents");
-  expect(container.textContent).toContain("New chat");
+  expect(tabs).toEqual(["Recents", "Agents"]);
+  const rows = [...container.querySelectorAll('nav[aria-label="Recent chats"] a')];
+  expect(rows.map(row => row.getAttribute("href"))).toEqual(["/chats/bob?thread=thread-2", "/chats/bob?thread=thread-1"]);
+  expect(rows[0].textContent).toContain("Deviled egg recipe");
+  expect(rows[0].textContent).toContain("No project / bob");
+  expect(container.textContent).not.toContain("Create a new agent");
   await showAgentsTab();
   expect(container.querySelectorAll('nav[aria-label="Agent conversations"] a').length).toBeGreaterThanOrEqual(2);
+  expect(container.textContent).toContain("Create a new agent");
 });

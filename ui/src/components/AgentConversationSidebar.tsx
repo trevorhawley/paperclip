@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "@/lib/router";
 import { agentRouteRef, cn } from "@/lib/utils";
+import { chatThreadHref } from "@/hooks/useAgentChatNavigation";
 
 export interface AgentConversationSidebarProps {
   agents: Agent[];
@@ -33,10 +34,25 @@ export interface AgentConversationSidebarProps {
   /** Agents you have a chat with, most recent first. Enables the Chats | Agents tabs. */
   conversationAgentIds?: readonly string[];
   chatMeta?: Record<string, { projectName: string | null; updatedAt: string }>;
+  /** Chat threads, most recent first. When given, the Chats tab lists these as Recents. */
+  threads?: readonly ChatThreadRow[];
+  activeThreadId?: string | null;
+  onThreadSelect?: () => void;
 }
 
-/** Searchable navigation for one conversation per agent. */
-export function AgentConversationSidebar({ agents, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, conversationAgentIds, chatMeta = {} }: AgentConversationSidebarProps) {
+export interface ChatThreadRow {
+  id: string;
+  title: string;
+  agent: Agent;
+  projectName: string | null;
+  updatedAt: string;
+  unreadCount: number;
+  unread: boolean;
+  working: boolean;
+}
+
+/** Searchable chat navigation: Recents (threads) and Agents. */
+export function AgentConversationSidebar({ agents, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, conversationAgentIds, chatMeta = {}, threads, activeThreadId, onThreadSelect }: AgentConversationSidebarProps) {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState(initialSearch);
@@ -47,7 +63,10 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
   const tabbed = conversationAgentIds !== undefined;
   // Until the person picks a tab, show Chats whenever there are any (they load after mount).
   const [chosenTab, setTab] = useState<"chats" | "agents" | null>(null);
-  const tab = chosenTab ?? (conversationAgentIds?.length ? "chats" : "agents");
+  const tab = chosenTab ?? (conversationAgentIds?.length || threads?.length ? "chats" : "agents");
+  const showThreads = tabbed && tab === "chats" && threads !== undefined;
+  const visibleThreads = (threads ?? []).filter(thread =>
+    `${thread.title} ${thread.agent.name} ${thread.projectName ?? ""}`.toLocaleLowerCase().includes(query));
   const chatIds = new Set(conversationAgentIds ?? []);
   // Agents keeps the full eligible list (open chat, then recent chats, then A–Z).
   const pool = !tabbed || tab === "agents" ? agents : agents.filter(agent => chatIds.has(agent.id));
@@ -73,7 +92,7 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         {(["chats", "agents"] as const).map(value => <button key={value} type="button" role="tab" aria-selected={tab === value}
           onClick={() => setTab(value)}
           className={cn("flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors", tab === value ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/60")}>
-          {value === "chats" ? `Chats${conversationAgentIds?.length ? ` · ${conversationAgentIds.length}` : ""}` : "Agents"}
+          {value === "chats" ? "Recents" : "Agents"}
         </button>)}
       </div>
     </div>}
@@ -84,7 +103,32 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         <p className="text-xs text-muted-foreground">Some chat history couldn’t load.</p>
         <Button variant="outline" size="sm" onClick={onRetryHistory}>Retry chat history</Button>
       </div>}
-      {error ? <div role="alert" className="flex flex-col items-start gap-2 px-2 py-6"><p className="text-sm">Couldn’t load your chats.</p><Button variant="outline" size="sm" onClick={onRetry}>Try again</Button></div> : loading ? <div aria-hidden="true" className="flex flex-col gap-1">
+      {showThreads && !error && !loading ? visibleThreads.length ? <nav aria-label="Recent chats" className="flex flex-col">
+        {visibleThreads.map(thread => {
+          const selected = activeThreadId === thread.id;
+          const hasUnread = thread.unreadCount > 0 || thread.unread;
+          return <Link key={thread.id} to={chatThreadHref(thread.agent, thread.id)} aria-current={selected ? "page" : undefined}
+            title={thread.title}
+            onClick={() => onThreadSelect?.()}
+            className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60")}>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={cn("min-w-0 flex-1 truncate text-sm", hasUnread && "font-semibold")}>{thread.title}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{thread.working ? "Working…" : formatChatTime(thread.updatedAt)}</span>
+              {thread.unreadCount > 0 ? <Badge variant="ghost" aria-label={`${thread.unreadCount} unread`} className="shrink-0 bg-primary font-mono tabular-nums text-primary-foreground">{thread.unreadCount}</Badge>
+                : hasUnread ? <span role="img" aria-label="Unread" className="size-2 shrink-0 rounded-full bg-primary" /> : null}
+            </span>
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <AgentAvatar agent={thread.agent} size={16} />
+              <span className="min-w-0 truncate">{[thread.projectName ?? "No project", thread.agent.name].join(" / ")}</span>
+            </span>
+          </Link>;
+        })}
+      </nav> : <div className="flex flex-col items-start gap-2 px-2 py-6">
+        <p className="text-sm font-medium">{query ? "No chats found" : "No chats yet"}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{query ? "Try another title, project or agent." : "Start one with New chat."}</p>
+      </div> : null}
+      {showThreads && !error && !loading ? null : error ? <div role="alert" className="flex flex-col items-start gap-2 px-2 py-6"><p className="text-sm">Couldn’t load your chats.</p><Button variant="outline" size="sm" onClick={onRetry}>Try again</Button></div> : loading ? <div aria-hidden="true" className="flex flex-col gap-1">
         {[0, 1, 2, 3].map(index => <div key={index} className="flex items-center gap-3 rounded-md px-2 py-3 motion-safe:animate-pulse">
           <div className="size-8 shrink-0 rounded-lg bg-muted" />
           <div className="flex flex-1 flex-col gap-2"><div className="h-3 w-2/3 rounded-sm bg-muted" /><div className="h-2 w-full rounded-sm bg-muted" /></div>
@@ -116,7 +160,7 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         {!agents.length && <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>Choose an agent</Button>}
         {agents.length > 0 && <Button variant="outline" size="sm" onClick={focusSearch}>Clear search</Button>}
       </div>}
-      {onCreateAgent && !loading && !error && <button type="button" onClick={onCreateAgent}
+      {onCreateAgent && !loading && !error && (!tabbed || tab === "agents") && <button type="button" onClick={onCreateAgent}
         className="flex min-w-0 items-center gap-3 rounded-md px-2.5 py-3 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         <span aria-hidden className="flex size-10 shrink-0 items-center justify-center"><span className="agent-contact-create flex size-8 items-center justify-center bg-muted"><Plus className="size-5 text-foreground" /></span></span>
         <span className="text-sm font-medium">Create a new agent</span>
