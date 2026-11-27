@@ -17,6 +17,9 @@ export function useLocalAiLogin(companyId: string | null, intent: AiConnectionLo
   const latestIntent = useRef(intent);
   const restartRequested = useRef(false);
   const pending = useRef<Promise<unknown>>(Promise.resolve());
+  // Lets a submitted browser code trigger an immediate re-check.
+  const recheck = useRef<() => void>(() => {});
+  const [verifying, setVerifying] = useState(false);
   const current = useRef<{ key: string; companyId: string; request: Promise<LocalAiLoginAttempt> } | null>(null);
   function cancelCurrent() {
     const previous = current.current;
@@ -34,6 +37,7 @@ export function useLocalAiLogin(companyId: string | null, intent: AiConnectionLo
     setStatus(null);
     setAuthorizationUrl(null);
     setCode(null);
+    setVerifying(false);
     if (!active || !companyId) return;
     let cancelled = false;
     let checking = false;
@@ -65,6 +69,7 @@ export function useLocalAiLogin(companyId: string | null, intent: AiConnectionLo
         setCode(next.code ?? null);
         setAccountLabel(next.accountLabel ?? null);
         setError(next.error ?? (next.status === "expired" ? "This sign-in attempt expired. Start sign-in again." : null));
+        if (next.status !== "sign_in_required" || next.error) setVerifying(false);
         // Stop polling a verified account. Focus rechecks after the provider
         // browser visit; sign-in never requires repeated Connect clicks.
         if (next.status === "sign_in_required") timer = setTimeout(() => void check(), 5000);
@@ -72,6 +77,7 @@ export function useLocalAiLogin(companyId: string | null, intent: AiConnectionLo
         if (!cancelled && (!isolated || current.current?.request === request)) setError(describeError(cause).body);
       } finally { checking = false; }
     }
+    recheck.current = () => void check();
     const onFocus = () => { if (!document.hidden) void check(); };
     void check();
     window.addEventListener("focus", onFocus);
@@ -93,6 +99,7 @@ export function useLocalAiLogin(companyId: string | null, intent: AiConnectionLo
     accountLabel,
     status,
     preparing: active && !status && !error,
+    verifying,
     error,
     cancel: () => {
       cancelCurrent();
@@ -111,6 +118,9 @@ export function useLocalAiLogin(companyId: string | null, intent: AiConnectionLo
         setError("Could not submit the authorization code. Start sign-in again.");
         throw cause;
       }
+      // Show progress and check quickly instead of waiting for the next poll.
+      setVerifying(true);
+      for (const delay of [500, 1500, 3000]) setTimeout(() => recheck.current(), delay);
     },
     connect: (input = intent) => {
       if (!companyId) throw new Error("Choose a company before connecting.");

@@ -488,7 +488,7 @@ export function ProviderApiKeyCard({
 /** Shared instructions for local subscription setup in every authentication host. */
 export function LocalProviderLoginInstructions({ adapterType, login }: {
   adapterType: string;
-  login?: { isolated?: boolean; command?: string; authorizationUrl?: string | null; code?: string | null; accountLabel?: string | null; submitCode?: (code: string) => Promise<void>; preparing: boolean; status?: "ready" | "sign_in_required" | "expired" | null; error: string | null; retry: () => void };
+  login?: { isolated?: boolean; command?: string; authorizationUrl?: string | null; code?: string | null; accountLabel?: string | null; submitCode?: (code: string) => Promise<void>; preparing: boolean; verifying?: boolean; status?: "ready" | "sign_in_required" | "expired" | null; error: string | null; retry: () => void };
 }) {
   const [showCommand, setShowCommand] = useState(false);
   const [browserCode, setBrowserCode] = useState("");
@@ -522,14 +522,18 @@ export function LocalProviderLoginInstructions({ adapterType, login }: {
       authorizationUrl={login.authorizationUrl}
       mode={adapterType === "antigravity_runtime" ? "browser_redirect" : adapterType === "claude_local" ? "submitted_code" : "displayed_code"}
     >
-      {adapterType === "claude_local" ? <div className="flex flex-col gap-2">
+      {adapterType === "claude_local" ? login.verifying
+        ? <p role="status" className="flex items-center gap-2 text-foreground"><Loader2 className="size-4 animate-spin" />Checking your code with Claude…</p>
+        : <div className="flex flex-col gap-2">
+        <p>After you approve, Claude shows a code. Copy it and paste it here.</p>
         <OnboardingCardField
           value={browserCode}
           onChange={setBrowserCode}
           onSubmit={() => void submitBrowserCode()}
           disabled={submitting}
         />
-        <Button type="button" disabled={!browserCode.trim() || submitting} onClick={() => void submitBrowserCode()}>Submit code</Button>
+        <Button type="button" disabled={!browserCode.trim() || submitting} onClick={() => void submitBrowserCode()}>{submitting ? "Submitting…" : "Submit code"}</Button>
+        <p className="text-xs">Signing in to Claude in Terminal doesn’t connect Paperclip. Use the link above.</p>
       </div> : adapterType === "antigravity_runtime" ? <p>Finish signing in in the Google browser window, then return here.</p> : <OnboardingLoginCodeRow code={login.code ?? ""} />}
     </ProviderSubscriptionCard>}
     {!browserLogin && (!ready || showCommand) && !login?.error && <>
