@@ -17,8 +17,7 @@ describe("native warm credential and file admission", () => {
   );
   it.each(["cursor", "pi", "claude", "grok"] as const)("preserves %s managed per-turn admission", (acpxAgent) => {
     const profile = { ...copilot, acpxAgent };
-    // Claude keeps its instruction directory across warm chat turns.
-    expect(supportsNativeWarmFiles(profile)).toBe(acpxAgent === "claude");
+    expect(supportsNativeWarmFiles(profile)).toBe(false);
     expect(supportsManagedNativeWarmSession(profile, { provider: "github", method: "api_key" })).toBe(false);
   });
   it("preserves Codex warm support", () => {
