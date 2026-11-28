@@ -97,6 +97,8 @@ export const issues = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    /** A chat the person deleted whose run history could not be removed: hidden everywhere, messages erased. */
+    chatDeletedAt: timestamp("chat_deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

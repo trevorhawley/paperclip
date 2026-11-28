@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveHeartbeatNativeLifecyclePolicy, type NativeLifecyclePolicy } from "./native-lifecycle.js";
+import { resolveHeartbeatNativeLifecyclePolicy, WARM_CHAT_IDLE_TIMEOUT_MS, type NativeLifecyclePolicy } from "./native-lifecycle.js";
 
 type Input = Parameters<typeof resolveHeartbeatNativeLifecyclePolicy>[0];
 const warm: NativeLifecyclePolicy = { mode: "warm", idleTimeoutMs: 900_000 };
@@ -51,5 +51,21 @@ describe("default lifecycle for an agent that never chose one", () => {
     { name: "a non-native adapter stays per-turn", change: { adapterType: "codex_local" }, expected: perTurn },
   ])("$name", ({ change, expected }) => {
     expect(resolveHeartbeatNativeLifecyclePolicy({ ...unset, ...change })).toEqual(expected);
+  });
+});
+
+describe("warm chat sessions", () => {
+  const chatBase = { adapterType: "paperclip_runner", agentMode: undefined, agentIdleTimeoutMs: undefined, managedAiSelected: true, taskOwned: false, localTarget: true } as const;
+  it("keeps a Claude chat warm on a connected account for 15 minutes", () => {
+    expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, backend: "acpx_runtime", acpxAgent: "claude", conversation: true }))
+      .toEqual({ mode: "warm", idleTimeoutMs: WARM_CHAT_IDLE_TIMEOUT_MS });
+  });
+  it("leaves non-chat Claude tasks per turn", () => {
+    expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, backend: "acpx_runtime", acpxAgent: "claude" }))
+      .toEqual({ mode: "per_turn", idleTimeoutMs: null });
+  });
+  it("respects an explicit per-turn agent setting", () => {
+    expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, agentMode: "per_turn", backend: "acpx_runtime", acpxAgent: "claude", conversation: true }).mode)
+      .toBe("per_turn");
   });
 });

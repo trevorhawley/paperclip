@@ -8,6 +8,7 @@ import { agentRouteRef } from "@/lib/utils";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Issue } from "@paperclipai/shared";
 import { issuesApi } from "@/api/issues";
+import { agentChatsApi } from "@/api/agentChats";
 import { projectsApi } from "@/api/projects";
 import { agentsApi } from "@/api/agents";
 import { queryKeys } from "@/lib/queryKeys";
@@ -95,7 +96,7 @@ export function AgentConversationsSidebar() {
       await client.invalidateQueries({ queryKey: ["agent-chat", companyId, userId] });
     }}
     onDeleteThread={async threadId => {
-      await issuesApi.remove(threadId);
+      await agentChatsApi.deleteThread(companyId!, threadId);
       client.setQueryData<Issue[]>(queryKeys.agentChats.list(companyId, userId), previous => previous?.filter(chat => chat.id !== threadId));
       await client.invalidateQueries({ queryKey: ["agent-chat", companyId, userId] });
       if (threadId === activeThreadId) navigate("/chats");
