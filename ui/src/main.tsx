@@ -87,6 +87,9 @@ startPersistedQueryCache(queryClient, {
 });
 window.addEventListener("load", () => {
   startServiceWorkerUpdates({
+    // An always-visible app window would otherwise keep running the old
+    // version silently. Offer the reload instead of forcing it mid-typing.
+    onUpdatePending: showUpdateReadyNotice,
     canReload: () => connectivity.getSnapshot().status === "online"
       && connectivity.getSnapshot().pendingWrites === 0 && queryClient.isMutating() === 0 && !hasPendingWrites(),
     subscribeReloadSafety: listener => {
@@ -147,3 +150,20 @@ getOrCreatePaperclipReactRoot(window, rootElement).render(
     </AppErrorBoundary>
   </StrictMode>
 );
+
+function showUpdateReadyNotice() {
+  if (document.getElementById("paperclip-update-ready")) return;
+  const notice = document.createElement("div");
+  notice.id = "paperclip-update-ready";
+  notice.setAttribute("role", "status");
+  notice.className = "fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-md";
+  const label = document.createElement("span");
+  label.textContent = "Paperclip was updated.";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:opacity-90";
+  button.textContent = "Reload";
+  button.addEventListener("click", () => window.location.reload());
+  notice.append(label, button);
+  document.body.append(notice);
+}

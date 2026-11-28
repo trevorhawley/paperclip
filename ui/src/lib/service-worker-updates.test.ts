@@ -43,6 +43,17 @@ function fakeDocument(initialVisibility: DocumentVisibilityState = "visible") {
 }
 
 describe("startServiceWorkerUpdates", () => {
+  it("offers a reload when an update lands while the window stays visible", () => {
+    const { container, emit } = fakeContainer({ controlled: true });
+    const { doc } = fakeDocument("visible");
+    const reload = vi.fn();
+    const onUpdatePending = vi.fn();
+    const stop = startServiceWorkerUpdates({ container, documentRef: doc, reload, onUpdatePending });
+    emit("controllerchange");
+    expect(reload).not.toHaveBeenCalled();
+    expect(onUpdatePending).toHaveBeenCalledTimes(1);
+    stop();
+  });
   it("keeps the installed page while a durable write is in flight and reloads once it settles", () => {
     const { container, emit } = fakeContainer({ controlled: true });
     const { doc } = fakeDocument("hidden");

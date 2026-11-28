@@ -18,7 +18,8 @@
  *   reload entirely: an uncontrolled page is already running the code the
  *   server just handed it.
  */
-const DEFAULT_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+// An installed app window can stay visible for days, so check often.
+const DEFAULT_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 export function startServiceWorkerUpdates(
   options: {
@@ -28,6 +29,8 @@ export function startServiceWorkerUpdates(
     updateIntervalMs?: number;
     canReload?: () => boolean;
     subscribeReloadSafety?: (listener: () => void) => () => void;
+    /** A newer version is ready but the visible tab was not reloaded under the user. */
+    onUpdatePending?: () => void;
   } = {},
 ): () => void {
   const container =
@@ -55,6 +58,7 @@ export function startServiceWorkerUpdates(
     if (reloaded) return;
     if (documentRef.visibilityState !== "hidden" || options.canReload?.() === false) {
       reloadPending = true;
+      options.onUpdatePending?.();
       return;
     }
     reloaded = true;
@@ -69,6 +73,7 @@ export function startServiceWorkerUpdates(
       applyUpdate();
     } else {
       reloadPending = true;
+      options.onUpdatePending?.();
     }
   };
   container.addEventListener("controllerchange", onControllerChange);
