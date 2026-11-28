@@ -4319,8 +4319,18 @@ registry.registerPath({
   path: "/api/companies/{companyId}/chats",
   tags: ["issues"],
   summary: "List the current board user's agent conversations",
-  description: "Requires Agent Chat to be enabled. Returns accessible conversations in the company, ordered by most recent activity. Each agent has one conversation per user.",
+  description: "Requires Agent Chat to be enabled. Returns accessible conversations in the company, ordered by most recent activity. A user can have several chat threads with each agent; deleted threads are omitted.",
   request: { params: z.object({ companyId: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/companies/{companyId}/chats/threads/{issueId}",
+  tags: ["issues"],
+  summary: "Delete one of the current board user's chat threads",
+  description: "Owner only. Stops any reply in progress, then deletes the chat. When run history still references it, its messages are erased and the chat is hidden everywhere. Returns { id, mode: deleted | erased }.",
+  request: { params: z.object({ companyId: z.string(), issueId: z.string() }) },
   responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
 });
 
