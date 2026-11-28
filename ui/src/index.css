@@ -5160,7 +5160,7 @@ html:not(.dark) .coordinator-sidebar {
 .coordinator-workspace [cmdk-root] { height: auto; flex: none; }
 .coordinator-workspace [cmdk-list] { flex: none; }
 .coordinator-decision-card { border: 1px solid var(--border); border-radius: var(--coordinator-card-radius, var(--radius-xl)); padding: var(--coordinator-card-inset, calc(var(--spacing) * 4)); background: var(--card); box-shadow: var(--coordinator-card-shadow); }
-.coordinator-decision-card.coordinator-decision-row { border: 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent); border-radius: 0; padding: calc(var(--spacing) * 2) calc(var(--spacing) * 1); background: transparent; box-shadow: none; }
+.coordinator-decision-card.coordinator-decision-row { border: 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent); border-radius: 0; padding: calc(var(--spacing) * 3) calc(var(--spacing) * 1); background: transparent; box-shadow: none; }
 .coordinator-decision-motion:has(> .coordinator-task-commitment-content > .coordinator-decision-row) { border: 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent); border-radius: 0; box-shadow: none; background: transparent; }
 .coordinator-decision-card > .rounded-lg { border: 0; padding: 0; background: transparent; box-shadow: none; }
 .coordinator-decision-card [data-testid="interaction-status-badge"], .coordinator-decision-card [data-testid="interaction-addressee-badge"] { display: none; }

@@ -79,7 +79,7 @@ export function ProjectContextView({ project, companyId }: { project: Project; c
         : attention.isError ? failed("Decisions", attention.refetch)
         : !needsYou.length ? <p className="text-sm text-muted-foreground">Nothing in this project is waiting on you.</p>
         : <>
-          {needsYou.slice(0, LIMIT).map(item => <div key={item.id} className="min-w-0 border-b border-border/60 py-1.5 last:border-0">
+          {needsYou.slice(0, LIMIT).map(item => <div key={item.id} className="min-w-0 border-b border-border/60 py-2.5 last:border-0">
             <p className="truncate font-medium">{item.subject.title ?? item.whyNow}</p>
             <p className="truncate text-xs text-muted-foreground">{[attentionDetailLine(item) ?? item.whyNow, item.relatedIssue?.identifier].filter(Boolean).join(" · ")}</p>
           </div>)}
