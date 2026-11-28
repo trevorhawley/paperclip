@@ -248,7 +248,7 @@ export function CoordinatorNeedsYou() {
     {feedWaiting ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading decisions…</p> : null}
     {(feedView.kind === "error") ? <div role="alert" className="space-y-2"><p className="text-sm">Decisions could not be loaded.</p><Button variant="outline" onClick={() => void feed.refetch()}>Retry</Button></div> : null}
     {!feedWaiting && !(feedView.kind === "error") && filtered.length === 0 ? <div className="space-y-3 py-8 text-center"><p className="text-sm text-muted-foreground">{!overview && filtersActive && !visibleRecentItems.length ? "No decisions match these filters." : pendingItems.length ? "No open decisions match these filters." : "You're caught up."}</p><Button variant="ghost" onClick={showHistory}>Open decision history<ArrowUpRight className="size-4" /></Button></div> : null}
-    {groups.map(([label, items]) => <div key={label} className="space-y-1">{label ? <h2 className="text-sm font-medium text-muted-foreground">{label}</h2> : null}{items.map((item) => {
+    {groups.map(([label, items]) => <div key={label} className="space-y-1">{label ? <h2 className="text-sm font-medium text-muted-foreground">{label}</h2> : null}{items.filter(item => !supersededByCard(item, items)).map((item) => {
       const issueId = item.relatedIssue?.id ?? String(item.subject.metadata?.issueId ?? "");
       const interaction = item.sourceKind === "issue_thread_interaction" && isInlineResolvable(item) && issueId;
       const decision = item.sourceKind === "decision" && isInlineResolvable(item);
@@ -261,7 +261,7 @@ export function CoordinatorNeedsYou() {
       return <motion.div id={item.sourceKind === "decision" ? `coordinator-decision-${item.subject.id}` : undefined} tabIndex={item.sourceKind === "decision" ? -1 : undefined} layout={reducedMotion ? false : "position"} layoutId={reducedMotion ? undefined : id} transition={{ duration }} key={id}>
       <CoordinatorTaskMotion eventId={`decision:${selectedCompanyId}:${userId}:${id}`} phase={phase} createdAt={item.activityAt} className="coordinator-decision-motion"
         onSettled={() => setSettling(current => current.filter(entry => `${entry.sourceKind}:${entry.subject.id}` !== id))}>
-      {receipt ? <Receipt item={receipt} onOpen={navigate} /> : <article className={interaction || decision || stalledReview ? "coordinator-decision-card space-y-3 rounded-lg border border-border bg-card p-4" : "coordinator-decision-card coordinator-decision-row flex min-w-0 items-center gap-3"}>
+      {receipt ? <Receipt item={receipt} onOpen={navigate} /> : <article className={interaction || decision || stalledReview ? "coordinator-decision-card my-2 space-y-3 rounded-lg border border-border bg-card p-4" : "coordinator-decision-card coordinator-decision-row flex min-w-0 items-center gap-3"}>
         {interaction ? <AttentionInteractionResolver footerSlot={taskLink} presentation="coordinator-decision" companyId={selectedCompanyId} issueId={issueId} interactionId={item.subject.id} agentMap={agentMap} currentUserId={userId} onResolved={resolved => {
           if (!resolved || resolved.status === "pending") { void feed.refetch(); void recent.refetch(); return; }
           onResolved(item);
@@ -282,6 +282,21 @@ export function CoordinatorNeedsYou() {
     {overview && <CoordinatorInboxOverview companyId={selectedCompanyId} userId={userId} agents={agentMap} />}
     </>}
   </section></LayoutGroup>;
+}
+
+function isActionCard(item: Parameters<typeof isInlineResolvable>[0]) {
+  return isInlineResolvable(item) && (item.sourceKind === "issue_thread_interaction" || item.sourceKind === "decision" ||
+    (item.sourceKind === "review" && item.subject.metadata?.reviewAttentionState === "stalled"));
+}
+
+/** One item per task: a plain notice row is dropped when the same task already
+ * has an action card (for example "Connect Anthropic" for a failed run), so a
+ * card never looks like it belongs to the row above it. */
+function supersededByCard(item: Parameters<typeof isInlineResolvable>[0], items: readonly Parameters<typeof isInlineResolvable>[0][]) {
+  if (isActionCard(item)) return false;
+  const taskId = item.relatedIssue?.id ?? (item.subject.kind === "issue" ? item.subject.id : null);
+  return !!taskId && items.some(other => other !== item && isActionCard(other)
+    && (other.relatedIssue?.id ?? String(other.subject.metadata?.issueId ?? "")) === taskId);
 }
 
 /** On the Overview, decisions sit in the same bounded block as every other
