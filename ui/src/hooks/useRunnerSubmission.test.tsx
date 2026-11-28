@@ -39,3 +39,31 @@ it("settles a newer saved message while the same Retry explanation remains visib
     await act(async () => root.unmount()); container.remove(); vi.useRealTimers();
   }
 });
+
+it("settles when the chat front door answered and the chat returned to review", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  function View({ comments = [], issueStatus = "in_progress" }: { comments?: IssueChatComment[]; issueStatus?: string }) {
+    const submission = useRunnerSubmission({ issueId: "chat", agentId: "agent", agent: { status: "idle" },
+      issueStatus, runId: null, comments });
+    return <><button onClick={() => submission.begin("hello")}>Send</button>{submission.pending && <span>Pending</span>}</>;
+  }
+  const at = new Date();
+  const user = { id: "u", clientRequestId: "hello", companyId: "c", issueId: "chat", authorType: "user", authorAgentId: null,
+    authorUserId: "board", body: "hi", presentation: null, metadata: null, createdAt: at, updatedAt: at } as IssueChatComment;
+  const reply = { ...user, id: "a", clientRequestId: null, authorType: "agent", authorAgentId: "agent", authorUserId: null,
+    body: "Hi, I'm here.", createdAt: new Date(at.getTime() + 2000) } as IssueChatComment;
+  try {
+    await act(async () => root.render(<View />));
+    await act(async () => container.querySelector("button")!.click());
+    await act(async () => root.render(<View comments={[user]} />));
+    expect(container.textContent).toContain("Pending");
+    // A work receipt alone keeps waiting for the agent turn.
+    await act(async () => root.render(<View comments={[user, reply]} />));
+    expect(container.textContent).toContain("Pending");
+    await act(async () => root.render(<View comments={[user, reply]} issueStatus="in_review" />));
+    expect(container.textContent).not.toContain("Pending");
+  } finally {
+    await act(async () => root.unmount()); container.remove();
+  }
+});

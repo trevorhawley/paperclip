@@ -65,8 +65,13 @@ export function useRunnerSubmission({
       (!submission.runIds.has(run.runId) && acknowledgedAt !== null &&
         new Date(run.createdAt).getTime() >= acknowledgedAt)
     )) : [];
+  // The chat front door can answer a simple message itself: the agent never
+  // starts, the chat returns to review, and the reply is already posted.
+  const answeredWithoutRun = Boolean(savedComment && acknowledgedAt !== null && issueStatus === "in_review" &&
+    comments.some(comment => comment.authorAgentId && !comment.clientStatus &&
+      new Date(comment.createdAt).getTime() >= acknowledgedAt));
   const settled = Boolean(submission && (
-    runId || startupBlocked || isTerminalIssueStatus(issueStatus) ||
+    runId || startupBlocked || isTerminalIssueStatus(issueStatus) || answeredWithoutRun ||
     (submission.agentId !== agentId && submission.previousAgentId !== agentId) ||
     (submission.issueId && submission.issueId !== issueId) ||
     (interruption && interruption.state !== "working" &&
