@@ -977,10 +977,8 @@ describe("TaskChatRunnerTurn", () => {
       container.querySelector('[data-testid="task-chat-turn-status-header"]')
         ?.textContent,
     ).toContain("Worked for");
-    expect(
-      container.querySelector('[data-testid="task-chat-phase-interstitial"]')
-        ?.textContent,
-    ).toContain("Checking.");
+    // A settled simple turn shows one reply: its interim narration is dropped.
+    expect(container.textContent).not.toContain("Checking.");
   });
 
   it("collapses progress text repeated verbatim by the final response", () => {

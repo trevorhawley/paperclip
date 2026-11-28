@@ -65,13 +65,32 @@ export function formatTaskChatCommentTimestamp(
   return formatTaskChatTimestamp(comment.createdAt);
 }
 
+function isFastReply(comment: IssueChatComment): boolean {
+  return !!comment.authorAgentId && comment.conversationSessionGeneration != null
+    && comment.body?.trim() !== "/new" && !(comment as { createdByRunId?: string | null }).createdByRunId;
+}
+
 export function commentsToTaskChatItems(
   comments: IssueChatComment[],
   ctx: TaskChatAdapterContext = {},
 ): TaskChatItem[] {
   const items: TaskChatItem[] = [];
+  // A fast reply is the instant receipt the front-door model posts before the
+  // agent answers. Once the agent's own reply to the same message arrives, the
+  // receipt is redundant: show one reply per message.
+  const superseded = new Set<string>();
+  const ordered = [...comments].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  for (let index = 0; index < ordered.length; index += 1) {
+    const comment = ordered[index];
+    if (!isFastReply(comment)) continue;
+    for (const later of ordered.slice(index + 1)) {
+      if (later.deletedAt) continue;
+      if (!later.authorAgentId) break;
+      if (!isFastReply(later)) { superseded.add(comment.id); break; }
+    }
+  }
   for (const comment of comments) {
-    if (comment.deletedAt) continue;
+    if (comment.deletedAt || superseded.has(comment.id)) continue;
     // Only a person's reset ("/new", "Start fresh") opens a new session. Fast
     // replies also carry the session generation they answered; they are messages.
     if (comment.conversationSessionGeneration != null && (!comment.authorAgentId || comment.body?.trim() === "/new")) {

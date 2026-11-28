@@ -245,8 +245,16 @@ export function TaskChatRunnerTurn({
   const final = finalRef.current.item;
   const timelineItems = paperclipRunnerTimelineItems(turnItems);
   const currentActivityItems = currentActivityStatusItems(timelineItems);
+  // Once a turn has settled with a reply, its interim narration ("I'll check
+  // that…") is noise next to the answer: keep one reply per message.
+  // Turns with questions, plans or other interactions keep their narration,
+  // since it explains each step.
+  const simpleTurn = timelineItems.every(item => item.kind === "message" || item.kind === "tool");
+  const visibleTimelineItems = terminal && final?.text?.trim() && simpleTurn
+    ? timelineItems.filter(item => !(item.kind === "message" && item.interstitial && item.channel === "progress"))
+    : omitProgressRepeatedByResponse(timelineItems, final?.text);
   const timelineRows = groupImageResources(buildTurnTimelineRows(
-    omitProgressRepeatedByResponse(timelineItems, final?.text),
+    visibleTimelineItems,
     !terminal,
   ));
 
