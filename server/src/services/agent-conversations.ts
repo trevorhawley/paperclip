@@ -422,6 +422,9 @@ export async function settleConversationTurn(
               isNull(issueComments.deletedAt),
               sql`${issueComments.authorUserId} is not null`,
               sql`(${issueComments.createdAt}, ${issueComments.id}) > (select cursor.created_at, cursor.id from issue_comments cursor where cursor.id = ${wake.id}::uuid)`,
+              // A message the front door already answered in full is not pending.
+              sql`not exists (select 1 from ${fastResponseRequests} where ${fastResponseRequests.companyId} = ${issueComments.companyId}
+                and ${fastResponseRequests.sourceCommentId} = ${issueComments.id} and ${fastResponseRequests.answeredDirectly})`,
             ),
           )
           .limit(1)

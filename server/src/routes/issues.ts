@@ -19488,6 +19488,38 @@ export function issueRoutes(
     });
   }
 
+  // Deleting a chat removes it outright when nothing else references it. A chat
+  // with run history keeps that bookkeeping (other records reference it), so its
+  // messages are erased and it is hidden everywhere instead.
+  router.delete("/companies/:companyId/chats/threads/:issueId", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    if (req.actor.type !== "board" || !req.actor.userId) throw forbidden("Board user access required");
+    const issue = await svc.getById(req.params.issueId as string);
+    if (!issue || issue.companyId !== companyId || !issue.conversationAgentId) throw notFound("Chat not found");
+    if (issue.conversationUserId !== req.actor.userId) throw forbidden("Only the chat owner can delete it");
+    for (const runId of new Set([issue.executionRunId, issue.checkoutRunId].filter((id): id is string => !!id))) {
+      await heartbeat.cancelRun(runId, "Chat deleted").catch(() => undefined);
+    }
+    let mode: "deleted" | "erased" = "deleted";
+    try {
+      await svc.remove(issue.id);
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 409) throw error;
+      mode = "erased";
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        await tx.update(issueComments).set({ body: "", deletedAt: now, updatedAt: now })
+          .where(and(eq(issueComments.companyId, companyId), eq(issueComments.issueId, issue.id)));
+        await tx.update(issueRows).set({ chatDeletedAt: now, hiddenAt: now, title: "Deleted chat", description: null, conversationState: "waiting", updatedAt: now })
+          .where(and(eq(issueRows.companyId, companyId), eq(issueRows.id, issue.id)));
+      });
+    }
+    await logActivity(db, { companyId, actorType: "user", actorId: req.actor.userId,
+      action: "issue.conversation_deleted", entityType: "issue", entityId: issue.id, details: { mode } });
+    res.json({ id: issue.id, mode });
+  });
+
   router.post(
     "/issues/:id/comments",
     validate(addIssueCommentSchema),

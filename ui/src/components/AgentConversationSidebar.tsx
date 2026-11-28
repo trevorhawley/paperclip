@@ -74,6 +74,11 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
   const showThreads = tabbed && tab === "chats" && threads !== undefined;
   const [showArchived, setShowArchived] = useState(false);
   const [deleting, setDeleting] = useState<ChatThreadRow | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  async function runThreadAction(action: () => void | Promise<void>, failure: string) {
+    setActionError(null);
+    try { await action(); } catch (error) { setActionError(error instanceof Error && error.message ? `${failure} ${error.message}` : failure); }
+  }
   const archivedCount = (threads ?? []).filter(thread => thread.archived).length;
   // Search covers archived chats too; otherwise Recents and Archived are separate views.
   const visibleThreads = (threads ?? []).filter(thread =>
@@ -115,6 +120,7 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         <p className="text-xs text-muted-foreground">Some chat history couldn’t load.</p>
         <Button variant="outline" size="sm" onClick={onRetryHistory}>Retry chat history</Button>
       </div>}
+      {actionError && <p role="alert" className="px-2 text-xs text-destructive">{actionError}</p>}
       {showThreads && !error && !loading ? visibleThreads.length ? <nav aria-label="Recent chats" className="flex flex-col">
         {visibleThreads.map(thread => {
           const selected = activeThreadId === thread.id;
@@ -127,7 +133,7 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
-              {onArchiveThread && <DropdownMenuItem onSelect={() => void onArchiveThread(thread.id, !thread.archived)}>
+              {onArchiveThread && <DropdownMenuItem onSelect={() => void runThreadAction(() => onArchiveThread(thread.id, !thread.archived), "Couldn’t update this chat.")}>
                 {thread.archived ? <><ArchiveRestore className="size-4" />Restore</> : <><Archive className="size-4" />Archive</>}
               </DropdownMenuItem>}
               {onArchiveThread && onDeleteThread && <DropdownMenuSeparator />}
@@ -212,7 +218,7 @@ export function AgentConversationSidebar({ agents, existingChatAgentIds, availab
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={() => { const thread = deleting; setDeleting(null); if (thread) void onDeleteThread?.(thread.id); }}>Delete</AlertDialogAction>
+          <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={() => { const thread = deleting; setDeleting(null); if (thread && onDeleteThread) void runThreadAction(() => onDeleteThread(thread.id), "Couldn’t delete this chat."); }}>Delete</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

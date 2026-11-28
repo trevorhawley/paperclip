@@ -11,6 +11,14 @@ export type NativeLifecyclePolicy = NonNullable<NativeExecutionInput["session"][
  * relaunch their provider process on every follow-up turn by design, so warm
  * does not shorten their follow-up and they stay per-turn.
  */
+/** Idle window before a warm chat provider closes; the next message relaunches it. */
+export const WARM_CHAT_IDLE_TIMEOUT_MS = 15 * 60_000;
+
+function supportsWarmChat(profile: { backend: string; acpxAgent?: unknown }): boolean {
+  return profile.backend === "codex_app_server" || profile.backend === "opencode_server"
+    || (profile.backend === "acpx_runtime" && profile.acpxAgent === "claude");
+}
+
 function defaultsToWarmLocally(backend: string): boolean {
   return backend === "codex_app_server" || backend === "opencode_server";
 }
@@ -28,18 +36,24 @@ export function resolveHeartbeatNativeLifecyclePolicy(input: {
   taskOwned: boolean;
   /** The run executes on this controller's host (no remote transport). */
   localTarget?: boolean;
+  /** An in-app chat turn: keep the provider warm between messages. */
+  conversation?: boolean;
 }): NativeLifecyclePolicy {
+  // Chats keep their agent's provider session warm between messages, including
+  // on a connected AI account, so a follow-up skips the relaunch and reload.
+  const warmChat = input.conversation === true && input.adapterType === "paperclip_runner" && input.localTarget === true
+    && supportsWarmChat({ backend: input.backend, acpxAgent: input.acpxAgent });
   // An explicit choice wins. With none, a local measured harness keeps its
   // runner and provider session for the default idle window so a follow-up
   // turn skips the launch and session load.
   const agentMode = input.agentMode === "warm" || input.agentMode === "per_turn" ? input.agentMode
-    : input.adapterType === "paperclip_runner" && input.localTarget === true && defaultsToWarmLocally(input.backend)
+    : warmChat || (input.adapterType === "paperclip_runner" && input.localTarget === true && defaultsToWarmLocally(input.backend))
       ? "warm" : "per_turn";
   const agentPolicy: NativeLifecyclePolicy = agentMode === "warm"
     ? { mode: "warm", idleTimeoutMs: input.agentMode === "warm"
-      ? resolvePaperclipRunnerIdleTimeoutMs(input.agentIdleTimeoutMs) : PAPERCLIP_RUNNER_IDLE_TIMEOUT_DEFAULT_MS }
+      ? resolvePaperclipRunnerIdleTimeoutMs(input.agentIdleTimeoutMs) : warmChat ? WARM_CHAT_IDLE_TIMEOUT_MS : PAPERCLIP_RUNNER_IDLE_TIMEOUT_DEFAULT_MS }
     : { mode: "per_turn", idleTimeoutMs: null };
-  const supportsManagedWarm = input.adapterType === "paperclip_runner" && (input.taskOwned ||
+  const supportsManagedWarm = input.adapterType === "paperclip_runner" && (input.taskOwned || warmChat ||
     supportsManagedNativeWarmSession({ backend: input.backend, acpxAgent: input.acpxAgent }, input.managedAiAttribution));
   return input.persistedPolicy ??
     (["openai_dot_mcp", "grok_bot_mcp", "muse_external", "cursor_cloud_api"].includes(input.backend) || input.managedAiSelected && !supportsManagedWarm

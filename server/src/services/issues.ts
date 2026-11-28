@@ -5111,6 +5111,7 @@ const issueListSelect = {
   completedAt: issues.completedAt,
   cancelledAt: issues.cancelledAt,
   hiddenAt: issues.hiddenAt,
+  chatDeletedAt: issues.chatDeletedAt,
   createdAt: issues.createdAt,
   updatedAt: issues.updatedAt,
 };
@@ -10184,11 +10185,12 @@ export function issueService(db: Db) {
 
     listConversations: async (companyId: string, userId: string) => db.select().from(issues).where(and(
       eq(issues.companyId, companyId), eq(issues.conversationUserId, userId), isNotNull(issues.conversationAgentId),
+      isNull(issues.chatDeletedAt),
     )).orderBy(desc(issues.updatedAt), asc(issues.id)),
 
     getConversation: async (companyId: string, agentId: string, userId: string, dbOrTx: Db | DbTransaction = db) => dbOrTx.select().from(issues).where(and(
       eq(issues.companyId, companyId), eq(issues.conversationAgentId, agentId), eq(issues.conversationUserId, userId),
-      isNull(issues.hiddenAt),
+      isNull(issues.hiddenAt), isNull(issues.chatDeletedAt),
     )).orderBy(desc(issues.updatedAt), desc(issues.id)).limit(1).then((rows) => rows[0] ?? null),
 
     create: async (
