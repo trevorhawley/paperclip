@@ -6,6 +6,20 @@ import {
 } from "./task-chat-adapter";
 
 describe("commentsToTaskChatItems", () => {
+  it("hides the instant fast reply once the agent's real reply arrives", () => {
+    const base = { authorType: "agent", authorUserId: null, authorAgentId: "agent-1" };
+    const user = (id: string, at: string) => ({ id, authorType: "user", authorUserId: "me", authorAgentId: null, body: "hi", createdAt: at });
+    const comments = [
+      user("q1", "2026-11-28T01:32:50Z"),
+      { ...base, id: "fast1", body: "Got it.", conversationSessionGeneration: 0, createdByRunId: null, createdAt: "2026-11-28T01:32:53Z" },
+      { ...base, id: "real1", body: "Here is the answer.", createdByRunId: "run-1", createdAt: "2026-11-28T01:33:24Z" },
+      user("q2", "2026-11-28T01:40:00Z"),
+      { ...base, id: "fast2", body: "On it.", conversationSessionGeneration: 0, createdByRunId: null, createdAt: "2026-11-28T01:40:02Z" },
+    ] as unknown as IssueChatComment[];
+    const ids = commentsToTaskChatItems(comments, { currentUserId: "me" }).map(item => item.id);
+    expect(ids).toEqual(["q1", "real1", "q2", "fast2"]);
+  });
+
   it("shows a fast agent reply as a message; only a person's reset is a new session", () => {
     const comments = [
       { id: "reset", authorType: "user", authorUserId: "me", authorAgentId: null, body: "/new",
