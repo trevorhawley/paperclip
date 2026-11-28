@@ -6,6 +6,8 @@ import type {
 import type { DecisionUsage, DecisionHistoryEntry } from "./decision-models.js";
 
 export const FAST_RESPONSE_DEADLINE_MS = 3_000;
+/** In-app agent chats: the front door may answer in full, not just acknowledge. */
+export const FAST_RESPONSE_TRIAGE_DEADLINE_MS = 6_000;
 export const FAST_RESPONSE_MAX_BYTES = 4_096;
 export const FAST_RESPONSE_MAX_CHARACTERS = 320;
 export const FAST_RESPONSE_DEFAULT_MODEL = "openai/gpt-oss-120b";

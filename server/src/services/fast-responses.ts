@@ -43,6 +43,7 @@ import {
   unitsToCents,
   updateFastResponseSchema,
   FAST_RESPONSE_DEADLINE_MS,
+  FAST_RESPONSE_TRIAGE_DEADLINE_MS,
   type AiProvider,
   type FastResponseSettings,
   type FastResponseHistoryEntry,
@@ -195,7 +196,10 @@ export async function enqueueFastResponse(tx: Db, source: FastResponseSource) {
       comment.deletedAt)
   )
     return;
-  if (source.acceptedAt.getTime() + FAST_RESPONSE_DEADLINE_MS <= Date.now())
+  // An in-app agent chat is triaged: the front door may write a full answer,
+  // which needs more time than a one-line receipt.
+  const deadlineMs = source.agentId && !source.endpointId ? FAST_RESPONSE_TRIAGE_DEADLINE_MS : FAST_RESPONSE_DEADLINE_MS;
+  if (source.acceptedAt.getTime() + deadlineMs <= Date.now())
     return;
   await notifyDeliveryWork(tx, DELIVERY_QUEUES.fastResponse);
   if (source.endpointId && source.deliveryId) await notifyChatResponseAvailability(tx, { companyId: source.companyId, deliveryId: source.deliveryId });
@@ -203,9 +207,7 @@ export async function enqueueFastResponse(tx: Db, source: FastResponseSource) {
     .insert(fastResponseRequests)
     .values({
       ...source,
-      expiresAt: new Date(
-        source.acceptedAt.getTime() + FAST_RESPONSE_DEADLINE_MS,
-      ),
+      expiresAt: new Date(source.acceptedAt.getTime() + deadlineMs),
     })
     .onConflictDoNothing();
 }
