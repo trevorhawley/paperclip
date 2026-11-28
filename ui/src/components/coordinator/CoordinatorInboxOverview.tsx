@@ -102,7 +102,7 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
         const task = run.issueId ? issueById.get(run.issueId) : undefined;
         const progress = run.currentStatusMessage?.trim() || run.lastAssistantSnippet?.trim();
         const time = run.lastUsefulActionAt ?? run.execution?.lastConfirmedActivityAt;
-        return <article key={run.id} className="min-w-0 space-y-0.5 border-b border-border/60 py-1.5 text-sm last:border-0">
+        return <article key={run.id} className="min-w-0 space-y-1 border-b border-border/60 py-2.5 text-sm last:border-0">
           {task ? taskName(task) : <span className="font-medium">{run.agentName}</span>}
           <p className="truncate text-xs text-muted-foreground">{[run.execution?.label ?? (run.status === "queued" ? "Queued" : "Running"), task ? taskContext(task, run.agentId) || run.agentName : null].filter(Boolean).join(" · ")}</p>
           {progress && <p className="truncate text-xs">{progress}</p>}
@@ -115,7 +115,7 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
         {failedTasks.map(({ run, task }) => {
           const agent = agents.get(run.agentId);
           const time = run.finishedAt ?? run.createdAt;
-          return <article key={run.id} className="min-w-0 space-y-0.5 border-b border-border/60 py-1.5 text-sm last:border-0">
+          return <article key={run.id} className="min-w-0 space-y-1 border-b border-border/60 py-2.5 text-sm last:border-0">
             {task ? taskName(task) : <span className="font-medium">{agent?.name ?? "Agent run"}</span>}
             <p className="truncate text-xs text-muted-foreground">{[run.status === "timed_out" ? "Timed out" : "Failed", agent?.name].filter(Boolean).join(" · ")}</p>
             {run.error?.trim() && <p className="truncate text-xs">{run.error.trim()}</p>}
@@ -130,7 +130,7 @@ export function CoordinatorInboxOverview({ companyId, userId, agents }: {
         {work.data.blocked.length === 0 && <p className="text-sm text-muted-foreground">No blocked tasks.</p>}
         {work.data.blocked.map(task => {
           const blocker = task.blockedInboxAttention;
-          return <article key={task.id} className="min-w-0 space-y-0.5 border-b border-border/60 py-1.5 text-sm last:border-0">
+          return <article key={task.id} className="min-w-0 space-y-1 border-b border-border/60 py-2.5 text-sm last:border-0">
             {taskName(task)}
             {taskContext(task) && <p className="truncate text-xs text-muted-foreground">{taskContext(task)}</p>}
             {blocker?.action && <p className="truncate text-xs">{blocker.action.detail || blocker.action.label}</p>}
