@@ -404,9 +404,6 @@ export function aiConnectionService(db: Db) {
     if (
       !installs.length &&
       !(
-        // "Use my own account": a person's personal connection serves every
-        // agent they work with, so connecting once is enough.
-        (binding.mode === "responsible_user" && grant.kind === "user" && grant.subjectUserId === userId) ||
         (input.allowUninstalledPersonal &&
           grant.kind === "user" && grant.subjectUserId === userId) ||
         (input.allowUninstalledShared && binding.mode === "shared" && grant.kind === "organization")
