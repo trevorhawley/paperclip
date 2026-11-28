@@ -1,0 +1,1 @@
+ALTER TABLE "fast_response_requests" ADD COLUMN "answered_directly" boolean DEFAULT false NOT NULL;

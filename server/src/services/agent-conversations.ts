@@ -15,6 +15,7 @@ import {
   agents,
   agentTaskSessions,
   agentWakeupRequests,
+  fastResponseRequests,
   heartbeatRuns,
   issueComments,
   issueTreeHolds,
@@ -576,6 +577,12 @@ export async function undeliveredConversationComments(
         sql`${issueComments.clientRequestId} is not null`,
         sql`not exists (select 1 from ${agentWakeupRequests} where ${agentWakeupRequests.companyId} = ${companyId}
       and ${agentWakeupRequests.idempotencyKey} = 'conversation-comment:' || ${issueComments.id}::text)`,
+        // Held while the front door triages it, and never delivered once the
+        // fast model answered it fully. An expired triage releases the hold.
+        sql`not exists (select 1 from ${fastResponseRequests} where ${fastResponseRequests.companyId} = ${companyId}
+      and ${fastResponseRequests.sourceCommentId} = ${issueComments.id}
+      and (${fastResponseRequests.answeredDirectly}
+        or (${fastResponseRequests.status} in ('pending', 'running') and ${fastResponseRequests.expiresAt} > now())))`,
       ),
     )
     .orderBy(issueComments.createdAt, issueComments.id)

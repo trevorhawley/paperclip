@@ -340,6 +340,12 @@ export function fastResponseService(
       commentId: string,
       text: string,
     ) => Promise<boolean>;
+    /**
+     * In-app chat delivery is held while the front door triages a message.
+     * Called after every decision (answer, receipt, failure or skip) so the
+     * agent turn starts unless the fast model already answered.
+     */
+    releaseConversation?: (request: Request) => Promise<void>;
   } = {},
 ) {
   const providerCall = options.provider ?? runFastResponseProvider;
@@ -710,6 +716,17 @@ export function fastResponseService(
     request: Request,
     signal?: AbortSignal,
   ): Promise<FastResponseTestResult> {
+    try {
+      return await decide(request, signal);
+    } finally {
+      if (request.issueId && !request.endpointId && options.releaseConversation)
+        await options.releaseConversation(request).catch(() => {});
+    }
+  }
+  async function decide(
+    request: Request,
+    signal?: AbortSignal,
+  ): Promise<FastResponseTestResult> {
     let selected: Awaited<ReturnType<typeof resolve>>,
       credential: string,
       prompt: string;
@@ -796,6 +813,7 @@ export function fastResponseService(
           title: selected.issue?.title,
           recent: recent.reverse().map((c) => sanitizeQuarantinedCommentForHigherTrust(c).body),
           queued: await fastResponseTurnQueued(db, request),
+          triage: !!request.agentId && !!selected.issue?.conversationAgentId,
         });
       } else
         prompt = fastResponsePrompt({
@@ -1056,8 +1074,20 @@ export function fastResponseService(
             .set({
               commentId: comment.id,
               publicationStatus: request.endpointId ? "pending" : "published",
+              ...(outcome.kind === "answer" && !request.endpointId ? { answeredDirectly: true } : {}),
             })
             .where(and(eq(fastResponseRequests.companyId, request.companyId), eq(fastResponseRequests.id, request.id)));
+          // Answered in full: the chat is waiting on the person again unless an
+          // agent turn is already queued or running for it.
+          if (outcome.kind === "answer" && !request.endpointId && request.agentId)
+            await tx.update(issues).set({ conversationState: "waiting", status: "in_review" }).where(and(
+              eq(issues.id, request.issueId!), eq(issues.companyId, request.companyId),
+              sql`${issues.conversationAgentId} is not null`,
+              sql`not exists (select 1 from ${heartbeatRuns} where ${heartbeatRuns.companyId} = ${request.companyId}
+                and ${heartbeatRuns.agentId} = ${request.agentId}
+                and ${heartbeatRuns.status} in ('queued', 'running')
+                and ${heartbeatRuns.contextSnapshot}->>'issueId' = ${request.issueId})`,
+            ));
           await logActivity(
             tx as unknown as Db,
             {
