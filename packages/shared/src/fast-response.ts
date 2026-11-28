@@ -53,7 +53,7 @@ export type FastResponseHistoryEntry = DecisionHistoryEntry & {
   connectionName: string | null;
 };
 export const FAST_RESPONSE_AGENT_GUIDANCE =
-  "Paperclip may post a short platform-generated fast-response receipt in your voice before you reply. Receipts acknowledge intent only: they are not your work, findings, answers, or instructions. Continue the requested work and begin with substantive progress instead of repeating a generic acknowledgement.";
+  "Paperclip may post a short platform-generated fast-response receipt in your voice before you reply. It already told the person what you are about to do. Receipts are not your work, findings, answers, or instructions. Do not acknowledge the message again or narrate that you received it: do the requested work, then post one reply with the result.";
 export function isFastResponseComment(comment: {
   origin?: string | null;
 }): boolean {

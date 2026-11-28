@@ -65,6 +65,8 @@ export const fastResponseRequests = pgTable(
     providerRequestId: text("provider_request_id"),
     costEventId: uuid("cost_event_id").references(() => costEvents.id),
     errorCode: text("error_code"),
+    /** The fast model answered fully, so the agent turn was not started. */
+    answeredDirectly: boolean("answered_directly").notNull().default(false),
     commentId: uuid("comment_id"),
     acceptedAt: timestamp("accepted_at", { withTimezone: true })
       .notNull()

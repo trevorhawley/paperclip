@@ -10,8 +10,9 @@ import { registerGitHubReviewProjectionWork } from "./services/chat-channels/git
 import { finishServiceShutdown } from "./shutdown.js";
 import { promptInjectionPreventionRoutes } from "./routes/prompt-injection-prevention.js";
 import { voiceSessionRoutes, voiceWebhookRoutes } from "./routes/voice-sessions.js";
-import { eq } from "drizzle-orm";
-import { chatEndpoints } from "@paperclipai/db";
+import { and, eq } from "drizzle-orm";
+import { chatEndpoints, issues } from "@paperclipai/db";
+import { deliverConversationComments } from "./services/agent-conversations.js";
 import { fastResponseRoutes } from "./routes/fast-responses.js";
 import { fastResponseService } from "./services/fast-responses.js";
 import { createDeliveryWorkCoordinator } from "./services/delivery-work-coordinator.js";
@@ -642,6 +643,12 @@ export async function createApp(
       return true;
     },
     budgetHooks: { cancelWorkForScope: connectionIntentHeartbeat.cancelBudgetScopeWork },
+    // The front door has decided; start the agent turn unless it answered.
+    releaseConversation: async (request) => {
+      const [issue] = await db.select({ id: issues.id, companyId: issues.companyId, conversationAgentId: issues.conversationAgentId })
+        .from(issues).where(and(eq(issues.id, request.issueId!), eq(issues.companyId, request.companyId)));
+      if (issue?.conversationAgentId) await deliverConversationComments(db, issue, connectionIntentHeartbeat.wakeup);
+    },
   });
   app.use(chatWebhookRoutes(chatChannels));
   // The instance validates single-use registration state and its trusted
