@@ -1334,14 +1334,23 @@ export function TaskChatThread(props: TaskChatThreadProps) {
         return;
       const item = commentItems[index];
       if (!item) return;
+      // The front door's receipt answers the message just before it. When that
+      // message is anchored later (where the runner consumed it), the receipt
+      // moves with it so it never sits above the question it answers.
+      const answered = comment.origin === "fast_response"
+        ? [...visibleComments].reverse().find(other => other.authorUserId && toMs(other.createdAt) <= toMs(comment.createdAt))
+        : undefined;
+      const answeredAnchorMs = answered?.conversationAnchorAt ? toMs(answered.conversationAnchorAt) : null;
+      const followsAnchoredMessage = answeredAnchorMs !== null && answeredAnchorMs > toMs(comment.createdAt);
       entries.push({
         // A held/queued input belongs where the runner actually consumes it,
         // not where the user first submitted it while another turn was live.
-        ms: comment.conversationAnchorAt
+        ms: followsAnchoredMessage ? answeredAnchorMs! : comment.conversationAnchorAt
           ? toMs(comment.conversationAnchorAt)
           : toMs(comment.createdAt),
-        order:
-          1 + Math.min(comment.conversationAnchorSequence ?? 0, 999) / 1000,
+        order: followsAnchoredMessage
+          ? 1 + Math.min(answered!.conversationAnchorSequence ?? 0, 999) / 1000 + 0.0005
+          : 1 + Math.min(comment.conversationAnchorSequence ?? 0, 999) / 1000,
         id: item.id,
         item,
       });

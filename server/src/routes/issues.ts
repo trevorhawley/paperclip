@@ -1,5 +1,8 @@
 import { listStalledDependencies } from "../services/recovery/blocker-stall-wakeups.js";
 import { deriveChatTitle, isDefaultChatTitle } from "../services/chat-thread-title.js";
+
+/** The model a new chat with an Opus-configured Claude agent uses by default. */
+const CHAT_DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5";
 import { confirmMcpAttachmentCleanup, recordMcpAttachmentCleanup, type McpAttachmentCleanup } from "../services/public-mcp/upload-cleanup.js";
 import { notifyDeferredExecutionWork } from "../services/deferred-execution-notifications.js";
 import { notifyNativeRecoveryNotices } from "../services/native-recovery-notice-notifications.js";
@@ -19476,7 +19479,14 @@ export function issueRoutes(
         return;
       }
       // create() returns the existing chat unless a separate thread is asked for.
+      // Chats default to the faster Sonnet when the agent's own model is Opus;
+      // the composer's model picker can still choose Opus for a thread.
+      const agentConfig = (agent.adapterConfig ?? {}) as Record<string, unknown>;
+      const chatModelOverride = agentConfig.provider === "acpx" && agentConfig.acpxAgent === "claude"
+        && typeof agentConfig.model === "string" && agentConfig.model.startsWith("claude-opus")
+        ? { assigneeAdapterOverrides: { adapterConfig: { model: CHAT_DEFAULT_CLAUDE_MODEL } } } : {};
       const issue = await svc.create(companyId, {
+        ...chatModelOverride,
         title: newThread ? "New chat" : `Chat with ${agent.name}`, assigneeAgentId: agent.id,
         conversationAgentId: agent.id, conversationUserId: userId, conversationNewThread: newThread,
         conversationState: "waiting", status: "in_review", createdByUserId: userId,
