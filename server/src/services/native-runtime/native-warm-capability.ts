@@ -5,7 +5,7 @@ type WarmProviderSelection = { backend: PaperclipRunnerProviderProfile["backend"
 /** Providers with a session-owned home and the current instruction-grant handoff. */
 export function supportsNativeWarmFiles(profile: WarmProviderSelection): boolean {
   return profile.backend === "codex_app_server" ||
-    (profile.backend === "acpx_runtime" && (profile.acpxAgent === "copilot" || profile.acpxAgent === "claude"));
+    (profile.backend === "acpx_runtime" && profile.acpxAgent === "copilot");
 }
 
 /** Copilot carries a token in its fenced session environment, not a temporary auth file.

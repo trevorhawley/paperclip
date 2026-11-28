@@ -15,8 +15,9 @@ export type NativeLifecyclePolicy = NonNullable<NativeExecutionInput["session"][
 export const WARM_CHAT_IDLE_TIMEOUT_MS = 15 * 60_000;
 
 function supportsWarmChat(profile: { backend: string; acpxAgent?: unknown }): boolean {
-  return profile.backend === "codex_app_server" || profile.backend === "opencode_server"
-    || (profile.backend === "acpx_runtime" && profile.acpxAgent === "claude");
+  // Claude (ACPX) is excluded: its runner closes the session after each turn, so
+  // a warm reattach fails (native_runner_warm_attachment_not_quiescent).
+  return profile.backend === "codex_app_server" || profile.backend === "opencode_server";
 }
 
 function defaultsToWarmLocally(backend: string): boolean {

@@ -69,7 +69,7 @@ describe("instruction working-copy extraction boundary", () => {
   it.each([
     ["copilot", false, true], ["copilot", true, true],
     ["cursor", false, true], ["cursor", true, true],
-    ["claude", false, true], ["claude", true, true],
+    ["claude", false, false], ["claude", true, false],
   ] as const)("prepares %s instructions with the expected warm ownership on remote=%s", async (agent, remote, warm) => {
     const target: Input["workspace"]["executionTarget"] = remote
       ? { kind: "remote", transport: "sandbox", remoteCwd: "/workspace", runnerLifecyclePolicy: { mode: "warm", idleTimeoutMs: 300_000 } }

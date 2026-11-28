@@ -56,9 +56,13 @@ describe("default lifecycle for an agent that never chose one", () => {
 
 describe("warm chat sessions", () => {
   const chatBase = { adapterType: "paperclip_runner", agentMode: undefined, agentIdleTimeoutMs: undefined, managedAiSelected: true, taskOwned: false, localTarget: true } as const;
-  it("keeps a Claude chat warm on a connected account for 15 minutes", () => {
-    expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, backend: "acpx_runtime", acpxAgent: "claude", conversation: true }))
+  it("keeps an OpenCode chat warm on a connected account for 15 minutes", () => {
+    expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, backend: "opencode_server", conversation: true }))
       .toEqual({ mode: "warm", idleTimeoutMs: WARM_CHAT_IDLE_TIMEOUT_MS });
+  });
+  it("keeps Claude chats per turn (its runner cannot reattach warm)", () => {
+    expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, backend: "acpx_runtime", acpxAgent: "claude", conversation: true }))
+      .toEqual({ mode: "per_turn", idleTimeoutMs: null });
   });
   it("leaves non-chat Claude tasks per turn", () => {
     expect(resolveHeartbeatNativeLifecyclePolicy({ ...chatBase, backend: "acpx_runtime", acpxAgent: "claude" }))
